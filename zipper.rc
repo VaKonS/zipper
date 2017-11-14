@@ -1,0 +1,28 @@
+#define UNICODE
+#include <windows.h>
+#include <winver.h>
+
+IDI_MAINICON ICON "zipper.ico"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION 1,0,0,0
+PRODUCTVERSION 1,0,0,0
+FILETYPE VFT_APP
+{
+    BLOCK "StringFileInfo"
+    {
+        BLOCK "000004B0"
+        {
+            VALUE "CompanyName",      ""
+            VALUE "LegalCopyright",   "Public domain."
+            VALUE "FileDescription",  "Automates the search of passes number for 7-Zip's zip compression."
+            VALUE "FileVersion",      "1.0"
+            VALUE "InternalName",     "Zipper"
+            VALUE "OriginalFilename", "zipper.exe"
+            VALUE "ProductName",      "Zipper"
+            VALUE "ProductVersion",   "1.0"
+            VALUE "Comments",         "https://github.com/VaKonS/zipper"
+        }
+    }
+    BLOCK "VarFileInfo" { VALUE "Translation", 0x0000, 1200 }
+}
