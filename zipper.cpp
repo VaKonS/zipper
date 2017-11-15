@@ -45,7 +45,7 @@ std::string trailSlash(std::string s) {
 int main(int argc, char** argv) {
 
     // definition of command line arguments
-    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip's zip archives.", ' ', "1.0");
+    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "1.01");
 
     TCLAP::ValueArg<std::string> cmdInputDir("i", "input-mask",
                     "Directory with files to compress.\nRun Zipper from this directory to avoid paths inside archives. [.]", false,
@@ -131,22 +131,23 @@ int main(int argc, char** argv) {
 	return EXIT_FAILURE;
     }
 
-    zip_passes.resize(passes);
     mem_stat.dwLength = sizeof(mem_stat);
     for (unsigned i = 0; i < dir_list.size(); i++) if ((dir_list[i] != ".") && (dir_list[i] != "..")) {
         std::cout << "File: " << dir_list[i] << std::endl;
         file_check = std::ifstream(zipInputDir + dir_list[i], std::ifstream::binary);
         if (file_check) {
             file_check.close();
-            for (unsigned p = 0; p < passes; p++) zip_passes[p].clear();
-            zip_passes.clear();
+            for (unsigned p = 0; p < zip_passes.size(); p++) zip_passes[p].clear();
+            zip_passes.clear(); // freeing memory
             zip_passes.resize(passes);
             mem_use = 0;
             unsigned match_counter = 0;
+            unsigned pass_counter = 0;
             arcname = zipTempDir + dir_list[i] + zipExt;
             std::cout << "Testing: " << arcname << std::endl;
             for (unsigned p = 0; p < passes; p++) {
-                std::cout << "-------------------------------------\nPasses: " << p + 1 << "/" << passes << std::endl;
+                pass_counter = p + 1;
+                std::cout << "-------------------------------------\nPasses: " << pass_counter << "/" << passes << std::endl;
                 //@for %%i in ("*.rdr" "*.geerdr" "*.drawinghand") do @for /L %%k in (1,1,80) do @"c:\Program Files\7-Zip\7z.exe" a -tzip -mx=9 -mmt=off -mtc=off -mfb=258 -mpass=%%k "%%~di%%~pizip\%%~ni%%~xi.%%k.zip" "%%i"
                 std::string zip_cmd = SevenZip + " a -tzip -mx=9 -mmt=" + mmt + " -mtc=off -mfb=258 -mpass=" + std::to_string(p + 1) +
                 " \"" + arcname + "\" \"" + zipInputDir + dir_list[i] + "\"";
@@ -169,32 +170,37 @@ int main(int argc, char** argv) {
                     std::cout << "Memory left: " << (std::max(std::min( (static_cast<int>(mem_limit) - static_cast<int>(mem_use) - zip_length), (static_cast<int>(mem_stat.dwAvailPhys) - zip_length) ), 0) >> 20) << " megabytes" << std::endl;
                     if (zip_length > 0) {
                         file_check.seekg(0, file_check.beg);
-                        zip_passes[p].resize(zip_length); // allocate memory
+                        std::vector<char> zip_pass1;
+                        zip_pass1.resize(zip_length); // allocating memory
+                        file_check.read(zip_pass1.data(), zip_length); // reading zip to memory
+                        file_check.close();
+                        for (unsigned c = 0; c < p; c++) {
+                            if (zip_passes[c].size() == static_cast<size_t>(zip_length)) {
+                                if (memcmp(zip_passes[c].data(), zip_pass1.data(), zip_length) == 0) {
+                                    match_counter++;
+                                    std::cout << "Matched archives: " << match_counter << "/" << detect_threshold << std::endl;
+                                    zip_pass1.clear(); // sample is already present
+                                    if (match_counter == detect_threshold) {
+                                        goto passes_checked;
+                                    } else
+                                        goto pass_matched;
+                                }
+                            }
+                        }
+                        zip_passes[p] = zip_pass1; // new archive sample, adding to array
                         mem_use += zip_length;
-                        file_check.read(zip_passes[p].data(), zip_length); // read zip to memory
-                    }
-                    file_check.close();
+                        match_counter = 0;
+pass_matched:
+                        match_counter = match_counter; // "nop", because label before "}" causes error
+                    } else
+                        file_check.close();
                 } else
                     std::cerr << "\nCan not open archive \"" << arcname << "\"." << std::endl;
-                for (unsigned c = 0; c < p; c++) {
-                    if (zip_passes[c].size() == zip_passes[p].size()) {
-                        if (memcmp(zip_passes[c].data(), zip_passes[p].data(), zip_passes[c].size()) == 0) {
-                            match_counter++;
-                            std::cout << "Matched archives: " << match_counter << "/" << detect_threshold << std::endl;
-                            if (match_counter == detect_threshold) { goto passes_checked; } else { goto pass_matched; };
-                        }
-                    }
-                }
-                match_counter = 0;
-pass_matched:
-                match_counter = match_counter; // "nop", because label before "}" causes error
             }
 passes_checked:
             unsigned min_zip_length = 1 << 30;
             unsigned zip_index = 0;
-            match_counter = 0;
             for (int p = passes - 1; p >= 0; p--) if (zip_passes[p].size() != 0) {
-                if (match_counter == 0) match_counter = p + 1;
                 if (zip_passes[p].size() <= min_zip_length) {
                     min_zip_length = zip_passes[p].size();
                     zip_index = p;
@@ -210,7 +216,7 @@ passes_checked:
                 std::string f = "%0" + std::to_string(d) + "u";
                 snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), (zip_index + 1));
                 arcname = arcname + ".best" + std::string(path_buf);
-                snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), match_counter);
+                snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), pass_counter);
                 arcname = arcname + ".of" + std::string(path_buf);
             }
             arcname += zipExt;
@@ -231,7 +237,7 @@ passes_checked:
     }
 
 //clean_end:
-    for (unsigned p = 0; p < passes; p++) zip_passes[p].clear();
+    for (unsigned p = 0; p < zip_passes.size(); p++) zip_passes[p].clear();
     zip_passes.clear();
     return 0;
 }
