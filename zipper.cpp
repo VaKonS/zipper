@@ -151,6 +151,8 @@ int main(int argc, char** argv) {
             file_check.close();
             for (unsigned p = 0; p < zip_passes.size(); p++) zip_passes[p].clear();
             zip_passes.clear(); // freeing memory
+            params.clear();
+            positions.clear();
             zip_passes.resize(passes);
             mem_use = 0;
             unsigned match_counter = 0;
