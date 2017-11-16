@@ -30,8 +30,11 @@ Store temporary archives in specified directory. Can be set to RAM drive to avoi
 **\-l** #<br>
 Limit memory usage. Default is 512 MB.<br>
 <br>
+**\-n** "archive.zip"<br>
+Compress into single archive (instead of separate archives by default).<br>
+<br>
 **\-s** 0 *(zero)*<br>
-Disable adding ".best#.of#" to archive names.<br>
+Disable adding ".best#.of#" to names of separate archives.<br>
 <br>
 **\-p** #<br>
 Limit number of search passes. Large values can be very slow.<br>
@@ -43,7 +46,7 @@ Begin from # passes. For example, when you need to continue a search.<br>
 Turn 7-Zip multithreading option off or limit number of threads.<br>
 <br>
 **\-d** #<br>
-Threshold to detect compression cycling. Values higher than 24 are probably useless.<br>
+Stop after # identical archives (detect compression cycling). Values higher than 24 are probably useless.<br>
 <br>
 **\-c** "7-Zip_pathname"<br>
 Manually set the pathname of 7-Zip executable.<br>
@@ -77,8 +80,11 @@ Redefine the archiving command. Template sequence `%c` is substituted with archi
 **\-l** #<br>
 Ограничить потребление памяти (изначально 512 метров).<br>
 <br>
+**\-n** "архив.zip"<br>
+Сжимать в один архив вместо отдельных для каждого файла.<br>
+<br>
 **\-s** 0 *(ноль)*<br>
-Не добавлять к именам архивов ".best#.of#".<br>
+Не добавлять к именам раздельных архивов ".best#.of#".<br>
 <br>
 **\-p** #<br>
 Ограничить количество попыток (100 по умолчанию).<br>
@@ -90,7 +96,7 @@ Redefine the archiving command. Template sequence `%c` is substituted with archi
 Задать количество потоков для архиватора 7-Zip.<br>
 <br>
 **\-d** #<br>
-Останавливаться при повторах сжатия. После тестов похоже, что значения выше 12 уже ничего не меняют.<br>
+Останавливаться при # повторах сжатия. После тестов похоже, что значения выше 12 уже ничего не меняют.<br>
 <br>
 **\-c** "7z.exe"<br>
 Указать расположение архиватора 7z.exe.<br>
