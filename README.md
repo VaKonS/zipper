@@ -36,6 +36,9 @@ Disable adding ".best#.of#" to archive names.<br>
 **\-p** #<br>
 Limit number of search passes. Large values can be very slow.<br>
 <br>
+**\-b** #<br>
+Begin from # passes. For example, when you need to continue a search.<br>
+<br>
 **\-m** off/#<br>
 Turn 7-Zip multithreading option off or limit number of threads.<br>
 <br>
@@ -43,7 +46,10 @@ Turn 7-Zip multithreading option off or limit number of threads.<br>
 Threshold to detect compression cycling. Values higher than 24 are probably useless.<br>
 <br>
 **\-c** "7-Zip_pathname"<br>
-Manually set the pathname of 7-Zip executable.
+Manually set the pathname of 7-Zip executable.<br>
+<br>
+**\-r** "command_template"<br>
+Redefine the archiving command. Template sequence `%c` is substituted with archiver's pathname, `%p`&nbsp;– with number of passes, `\"%i\"`&nbsp;– with compressing file, `\"%o\"`&nbsp;– with archive.zip.
 
 ---
 ## In Russian:
@@ -77,6 +83,9 @@ Manually set the pathname of 7-Zip executable.
 **\-p** #<br>
 Ограничить количество попыток (100 по умолчанию).<br>
 <br>
+**\-b** #<br>
+Начать с # проходов. Например, если нужно продолжить поиск.<br>
+<br>
 **\-m** off/#<br>
 Задать количество потоков для архиватора 7-Zip.<br>
 <br>
@@ -84,4 +93,7 @@ Manually set the pathname of 7-Zip executable.
 Останавливаться при повторах сжатия. После тестов похоже, что значения выше 12 уже ничего не меняют.<br>
 <br>
 **\-c** "7z.exe"<br>
-Указать расположение архиватора 7z.exe.
+Указать расположение архиватора 7z.exe.<br>
+<br>
+**\-r** "шаблон_команды"<br>
+Переопределить выполняемую команду. Вместо символов `%c` шаблона подставляется имя архиватора, `%p`&nbsp;– количество проходов, `\"%i\"`&nbsp;– сжимаемый файл, `\"%o\"`&nbsp;– архив.zip.
