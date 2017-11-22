@@ -44,10 +44,20 @@ std::string trailSlash(std::string s) {
     return s + "\\";
 }
 
+std::string papl(unsigned n) {
+    if (n == 1) return " pass";
+    return " passes";
+}
+
+std::string bypl(unsigned n) {
+    if (n == 1) return "byte";
+    return "bytes";
+}
+
 int main(int argc, char** argv) {
 
     // definition of command line arguments
-    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "1.11");
+    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.111");
 
     TCLAP::ValueArg<std::string> cmdInputDir("i", "input-mask",
                     "Directory with files to compress.\nRun Zipper from this directory to avoid paths inside archives. [.]", false,
@@ -94,7 +104,7 @@ int main(int argc, char** argv) {
                     "on", "string", cmd);
 
     TCLAP::ValueArg<std::string> cmdRedefine("r", "redefine",
-                    "Fully redefine command line.\nPass arguments as %c, \\\"%i\\\", \\\"%o\\\", \\\"%p\\\".", false,
+                    "Fully redefine command line.\nPass arguments as %c, \\\"%i\\\", \\\"%o\\\", \\\"%p\\\".\nUse %% to pass % character before c, i, o, p without substitution.", false,
                     "", "string", cmd);
 
     // parse command line arguments
@@ -155,7 +165,7 @@ int main(int argc, char** argv) {
 
     mem_stat.dwLength = sizeof(mem_stat);
     for (unsigned i = 0; i < dir_list.size(); i++) if ((dir_list[i] != ".") && (dir_list[i] != "..")) {
-        std::cout << "File: " << dir_list[i] << std::endl;
+        std::cout << "\n-------------------------------------\nFile: " << dir_list[i] << std::endl;
         file_check = std::ifstream(zipInputDir + dir_list[i], std::ifstream::binary);
         if (file_check) {
             file_check.close();
@@ -177,27 +187,30 @@ int main(int argc, char** argv) {
                     size_t b = redefine.find("%o", l);
                     size_t c = redefine.find("%p", l);
                     size_t d = redefine.find("%c", l);
-                    //std::cout << "a, b, c, d: " << a << ", " << b << ", " << c << ", " << d << std::endl;
-                    l = std::min(std::min(std::min(a, b), c), d);
-                    //std::cout << "l: " << l << std::endl;
+                    size_t e = redefine.find("%%", l);
+                    l = std::min(std::min(std::min(std::min(a, b), c), d), e);
                     if (l < redefine.npos) {
                         if      (l == a) params.push_back(zipInputDir + dir_list[i]);
                         else if (l == b) params.push_back(arcname_temp);
                         else if (l == c) params.push_back("");
                         else if (l == d) params.push_back(SevenZip);
+                        else if (l == e) params.push_back("%");
                         positions.push_back(l);
                         l = l + 2;
                     }
-
                 }
-                //std::cout << "params.size(): " << params.size() << std::endl;
-                //std::cout << "positions.size(): " << positions.size() << std::endl;
             }
 
+            unsigned min_zip_length = (unsigned) -1;
+            unsigned min_zip_index = 0;
             for (unsigned p = begin - 1; p < passes; p++) {
-                pass_counter = p + 1;
-                std::cout << "-------------------------------------\nPasses: " << pass_counter << "/" << passes << std::endl;
-                if (redefine == "") {
+                std::cout << "-------------------------------------\nPasses: " << (p + 1) << "/" << passes;
+                if (min_zip_length == (unsigned) -1) {
+                    std::cout << std::endl;
+                } else {
+                    std::cout << ", minimal packed size: " << min_zip_length << " " << bypl(min_zip_length) << " (" << (min_zip_index + 1) << papl(min_zip_index + 1) << ")." << std::endl;
+                }
+                if (redefine.size() == 0) {
                     //@for %%i in ("*.rdr" "*.geerdr" "*.drawinghand") do @for /L %%k in (1,1,80) do @"c:\Program Files\7-Zip\7z.exe" a -tzip -mx=9 -mmt=off -mtc=off -mfb=258 -mpass=%%k "%%~di%%~pizip\%%~ni%%~xi.%%k.zip" "%%i"
                     zip_cmd = SevenZip + " a -tzip -mx=9 -mmt=" + mmt + " -mtc=off -mfb=258 -mpass=" + std::to_string(p + 1)
                               + " \"" + arcname_temp + "\" \"" + zipInputDir + dir_list[i] + "\"";
@@ -226,10 +239,20 @@ int main(int argc, char** argv) {
                     if (((mem_use + zip_length) > mem_limit) || (static_cast<size_t>(zip_length) > mem_stat.dwAvailPhys)) {
                         std::cout << "\nNo memory left to store archives.\nChoosing from what was saved so far..." << std::endl;
                         file_check.close();
+                        if (zipSingle.size() != 0) {
+                            // when packing to single archive, memory storage is not used and smaller size can still be packed
+                            if (zip_length > 0) if ((unsigned) zip_length < min_zip_length) {
+                                min_zip_length = zip_length;
+                                min_zip_index = p;
+                                pass_counter = p + 1;
+                            }
+                        }
                         goto passes_checked;
                     }
-                    std::cout << "Memory left: " << (std::max(std::min( (static_cast<int>(mem_limit) - static_cast<int>(mem_use) - zip_length), (static_cast<int>(mem_stat.dwAvailPhys) - zip_length) ), 0) >> 20) << " megabytes" << std::endl;
+                    unsigned m = std::max(std::min( (static_cast<int>(mem_limit) - static_cast<int>(mem_use) - zip_length), (static_cast<int>(mem_stat.dwAvailPhys) - zip_length) ), 0) >> 20;
+                    std::cout << "Memory left: " << m << " mega" << bypl(m) << std::endl;
                     if (zip_length > 0) {
+                        pass_counter = p + 1;
                         file_check.seekg(0, file_check.beg);
                         std::vector<char> zip_pass1;
                         zip_pass1.resize(zip_length); // allocating memory
@@ -248,6 +271,10 @@ int main(int argc, char** argv) {
                                 }
                             }
                         }
+                        if ((unsigned) zip_length < min_zip_length) {
+                            min_zip_length = zip_length;
+                            min_zip_index = p;
+                        }
                         zip_passes[p] = zip_pass1; // new archive sample, adding to array
                         mem_use += zip_length;
                         match_counter = 0;
@@ -259,16 +286,8 @@ pass_matched:
                     std::cerr << "\nCan not open archive \"" << arcname_temp << "\"." << std::endl;
             }
 passes_checked:
-            unsigned min_zip_length = (unsigned) -1;
-            unsigned zip_index = 0;
-            for (int p = passes - 1; p >= 0; p--) if (zip_passes[p].size() != 0) {
-                if (zip_passes[p].size() <= min_zip_length) {
-                    min_zip_length = zip_passes[p].size();
-                    zip_index = p;
-                }
-            }
             if (min_zip_length != (unsigned) -1) {
-                std::cout << "Minimum archive size: " << min_zip_length << " bytes (passes: " << (zip_index + 1) << ")." << std::endl;
+                std::cout << "Minimum archive size: " << min_zip_length << " " << bypl(min_zip_length) << " (" << (min_zip_index + 1) << papl(min_zip_index + 1) << ")." << std::endl;
             } else {
                 std::cout << "No archives were created." << std::endl;
             }
@@ -276,23 +295,23 @@ passes_checked:
             remove(arcname_temp.c_str());
 
             if (zipSingle.size() == 0) {
-                arcname_out = zipOutputDir + dir_list[i];
-                if (show_passes) {
-                    int d = std::floor(std::log10(passes)) + 1;
-                    std::string f = "%0" + std::to_string(d) + "u";
-                    snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), (zip_index + 1));
-                    arcname_out = arcname_out + ".best" + std::string(path_buf);
-                    snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), pass_counter);
-                    arcname_out = arcname_out + ".of" + std::string(path_buf);
-                }
-                arcname_out += zipExt;
                 if (min_zip_length != (unsigned) -1) {
+                    arcname_out = zipOutputDir + dir_list[i];
+                    if (show_passes) {
+                        int d = std::floor(std::log10(passes)) + 1;
+                        std::string f = "%0" + std::to_string(d) + "u";
+                        snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), (min_zip_index + 1));
+                        arcname_out = arcname_out + ".best" + std::string(path_buf);
+                        snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), pass_counter);
+                        arcname_out = arcname_out + ".of" + std::string(path_buf);
+                    }
+                    arcname_out += zipExt;
                     std::cout << "Writing \"" << arcname_out << "\"." << std::endl;
                     outfile = std::ofstream(arcname_out, std::ofstream::binary);
                     if (!outfile) {
                         std::cerr << "\nError writing archive \"" << arcname_out << "\"." << std::endl;
                     } else {
-                        outfile.write(zip_passes[zip_index].data(), min_zip_length); // save smallest archive
+                        outfile.write(zip_passes[min_zip_index].data(), min_zip_length); // save smallest archive
                         outfile.close();
                     }
                 } else
@@ -301,7 +320,7 @@ passes_checked:
                 if (min_zip_length != (unsigned) -1) {
                     arcname_out = zipOutputDir + zipSingle;
                     if (redefine.size() == 0) {
-                        zip_cmd = SevenZip + " a -tzip -mx=9 -mmt=" + mmt + " -mtc=off -mfb=258 -mpass=" + std::to_string(zip_index + 1)
+                        zip_cmd = SevenZip + " a -tzip -mx=9 -mmt=" + mmt + " -mtc=off -mfb=258 -mpass=" + std::to_string(min_zip_index + 1)
                                   + " \"" + arcname_out + "\" \"" + zipInputDir + dir_list[i] + "\"";
                     } else {
                         zip_cmd = redefine;
@@ -314,7 +333,7 @@ passes_checked:
                                     zip_cmd.insert(positions[a], params[a]);
                                 }
                             } else {
-                                zip_cmd.insert(positions[a], std::to_string(zip_index + 1));
+                                zip_cmd.insert(positions[a], std::to_string(min_zip_index + 1));
                             }
                         }
                     }
