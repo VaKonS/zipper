@@ -52,7 +52,7 @@ Stop after # identical archives (detect compression cycling). Values higher than
 Manually set the pathname of 7-Zip executable.<br>
 <br>
 **\-r** "command_template"<br>
-Redefine the archiving command. Template sequence `%c` is substituted with archiver's pathname, `%p`&nbsp;– with number of passes, `\"%i\"`&nbsp;– with compressing file, `\"%o\"`&nbsp;– with archive.zip.
+Redefine the archiving command. Template sequence `%c` is substituted with archiver's pathname, `%p`&nbsp;– with number of passes, `\"%i\"`&nbsp;– with compressing file, `\"%o\"`&nbsp;– with archive.zip. Use "%%i" when you need "%i" text in command without substitution.
 
 ---
 ## In Russian:
@@ -102,4 +102,4 @@ Redefine the archiving command. Template sequence `%c` is substituted with archi
 Указать расположение архиватора 7z.exe.<br>
 <br>
 **\-r** "шаблон_команды"<br>
-Переопределить выполняемую команду. Вместо символов `%c` шаблона подставляется имя архиватора, `%p`&nbsp;– количество проходов, `\"%i\"`&nbsp;– сжимаемый файл, `\"%o\"`&nbsp;– архив.zip.
+Переопределить выполняемую команду. Вместо символов `%c` шаблона подставляется имя архиватора, `%p`&nbsp;– количество проходов, `\"%i\"`&nbsp;– сжимаемый файл, `\"%o\"`&nbsp;– архив.zip. Если в команде нужен текст "%i" без подстановки, используйте "%%i".
