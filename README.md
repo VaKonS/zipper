@@ -46,7 +46,10 @@ Begin from # passes. For example, when you need to continue a search.<br>
 Turn 7-Zip multithreading option off or limit number of threads.<br>
 <br>
 **\-d** #<br>
-Stop after # identical archives (detect compression cycling). Values higher than 24 are probably useless.<br>
+Stop after # identical archives (detect compression cycling). Values higher than 24 are probably useless. Search with cycling compression is considered "complete".<br>
+<br>
+**\-f** 0 *(zero)*<br>
+Do not indicate by "+/-" in names of separate archives a complete/incomplete search ("incomplete" means that more passes can still make smaller archive).<br>
 <br>
 **\-c** "7-Zip_pathname"<br>
 Manually set the pathname of 7-Zip executable.<br>
@@ -96,7 +99,10 @@ Redefine the archiving command. Template sequence `%c` is substituted with archi
 Задать количество потоков для архиватора 7-Zip.<br>
 <br>
 **\-d** #<br>
-Останавливаться при # повторах сжатия. После тестов похоже, что значения выше 12 уже ничего не меняют.<br>
+Останавливаться при # повторах сжатия. После тестов похоже, что значения выше 12 уже ничего не меняют. Поиск, начавший повторятся, считается "полным".<br>
+<br>
+**\-f** 0 *(ноль)*<br>
+Не показывать "+/-" в именах раздельных архивов, полный был поиск или нет (при "неполном" поиске меньший размер архива всё ещё возможен с большим количеством проходов).<br>
 <br>
 **\-c** "7z.exe"<br>
 Указать расположение архиватора 7z.exe.<br>
