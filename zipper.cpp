@@ -19,7 +19,7 @@ const std::string zipExt = ".zip";
 
 
 // uninitialized data
-bool show_passes;
+bool show_passes, show_full, is_full;
 unsigned passes, begin, detect_threshold;
 size_t mem_limit, mem_use;
 std::string SevenZip, zipTempDir, zipInputDir, zipOutputDir, arcname_temp, arcname_out, mmt, redefine, zipSingle, zip_cmd;
@@ -57,6 +57,8 @@ std::string bypl(unsigned n) {
 int main(int argc, char** argv) {
 
     // definition of command line arguments
+    // abcdefghijklmnopqrstuvwxyz
+    // .bcd.f..i..lmnop.rst......
     TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.111");
 
     TCLAP::ValueArg<std::string> cmdInputDir("i", "input-mask",
@@ -99,6 +101,10 @@ int main(int argc, char** argv) {
                     "Show number of found and checked passes in \"name.best#.of#.zip\". [1 = yes]", false,
                     true, "boolean", cmd);
 
+    TCLAP::ValueArg<bool> cmdShowFull("f", "show-fullness",
+                    "Indicate complete or incomplete search. [1 = yes]", false,
+                    true, "boolean", cmd);
+
     TCLAP::ValueArg<std::string> cmdMMT("m", "multithreading",
                     "7-Zip multithreading = off/on/N threads. [on]", false,
                     "on", "string", cmd);
@@ -126,6 +132,7 @@ int main(int argc, char** argv) {
     mem_limit          = cmdMemLimit.getValue() << 20;
     mmt                = cmdMMT.getValue();
     show_passes        = cmdShowPasses.getValue();
+    show_full          = cmdShowFull.getValue();
     detect_threshold   = cmdDetect.getValue();
     redefine           = cmdRedefine.getValue();
     zipSingle          = cmdSingle.getValue();
@@ -165,6 +172,7 @@ int main(int argc, char** argv) {
 
     mem_stat.dwLength = sizeof(mem_stat);
     for (unsigned i = 0; i < dir_list.size(); i++) if ((dir_list[i] != ".") && (dir_list[i] != "..")) {
+        is_full = false;
         std::cout << "\n-------------------------------------\nFile: " << dir_list[i] << std::endl;
         file_check = std::ifstream(zipInputDir + dir_list[i], std::ifstream::binary);
         if (file_check) {
@@ -265,6 +273,7 @@ int main(int argc, char** argv) {
                                     std::cout << "Matched archives: " << match_counter << "/" << detect_threshold << std::endl;
                                     zip_pass1.clear(); // sample is already present
                                     if (match_counter == detect_threshold) {
+                                        is_full = true;
                                         goto passes_checked;
                                     } else
                                         goto pass_matched;
@@ -304,6 +313,9 @@ passes_checked:
                         arcname_out = arcname_out + ".best" + std::string(path_buf);
                         snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), pass_counter);
                         arcname_out = arcname_out + ".of" + std::string(path_buf);
+                    }
+                    if (show_full) {
+                        arcname_out += (is_full ? ".+" : ".-");
                     }
                     arcname_out += zipExt;
                     std::cout << "Writing \"" << arcname_out << "\"." << std::endl;
