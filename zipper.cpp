@@ -304,8 +304,8 @@ passes_checked:
             remove(arcname_temp.c_str());
 
             if (zipSingle.size() == 0) {
+                arcname_out = zipOutputDir + dir_list[i];
                 if (min_zip_length != (unsigned) -1) {
-                    arcname_out = zipOutputDir + dir_list[i];
                     if (show_passes) {
                         int d = std::floor(std::log10(passes)) + 1;
                         std::string f = "%0" + std::to_string(d) + "u";
@@ -327,7 +327,7 @@ passes_checked:
                         outfile.close();
                     }
                 } else
-                    std::cerr << "\nError compressing archive \"" << arcname_out << "\"." << std::endl;
+                    std::cerr << "\nError compressing archive \"" << arcname_out << ".#.#.#" << zipExt << "\"." << std::endl;
             } else { // single archive
                 if (min_zip_length != (unsigned) -1) {
                     arcname_out = zipOutputDir + zipSingle;
