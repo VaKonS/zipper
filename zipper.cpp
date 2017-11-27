@@ -29,7 +29,7 @@ DIR * dir_handle;
 dirent * dir_entry;
 std::ifstream file_check;
 std::ofstream outfile;
-std::vector<std::vector<char>> zip_passes;
+std::vector<std::vector<char>> zip_samples;
 char path_buf[2048];
 MEMORYSTATUS mem_stat;
 std::vector<int> params; // arg_string[] indexes, -1 for pass number
@@ -45,22 +45,14 @@ std::string trailSlash(std::string s) {
     return s + "\\";
 }
 
-std::string papl(unsigned n) {
-    if (n == 1) return " pass";
-    return " passes";
-}
-
-std::string bypl(unsigned n) {
-    if (n == 1) return "byte";
-    return "bytes";
-}
+std::string papl(unsigned n) {return (n == 1) ? " pass" : " passes";}
+std::string bypl(unsigned n) {return (n == 1) ? "byte" : "bytes";}
 
 int main(int argc, char** argv) {
 
-    // definition of command line arguments
-    // abcdefghijklmnopqrstuvwxyz
-    // .bcd.f..i..lmnop.rst......
-    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.111");
+    // definition of command line arguments   abcdefghijklmnopqrstuvwxyz
+    //                                        .bcd.f..i..lmnop.rst......
+    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.2");
 
     TCLAP::ValueArg<std::string> cmdInputDir("i", "input-mask",
                     "Directory with files to compress.\nRun Zipper from this directory to avoid paths inside archives. [.]", false,
@@ -111,7 +103,7 @@ int main(int argc, char** argv) {
                     "on", "string", cmd);
 
     TCLAP::ValueArg<std::string> cmdRedefine("r", "redefine",
-                    "Fully redefine command line.\nPass arguments as %c, \\\"%i\\\", \\\"%o\\\", \\\"%p\\\".\nUse %% to pass % character before c, i, o, p without substitution.", false,
+                    "Fully redefine command line.\nPass arguments as %c (7z.exe), \\\"%i\\\" (file), \\\"%o\\\" (archive), %p (passes).\nUse %% to pass % character before c, i, o, p without substitution.", false,
                     "", "string", cmd);
 
     // parse command line arguments
@@ -134,7 +126,7 @@ int main(int argc, char** argv) {
     mmt                = cmdMMT.getValue();
     show_passes        = cmdShowPasses.getValue();
     show_full          = cmdShowFull.getValue();
-    detect_threshold   = cmdDetect.getValue();
+    detect_threshold   = std::min(cmdDetect.getValue(), static_cast<int>(passes + 1));
     redefine           = cmdRedefine.getValue();
     zipSingle          = cmdSingle.getValue();
 
@@ -181,14 +173,14 @@ int main(int argc, char** argv) {
         file_check = std::ifstream(arg_string[1], std::ifstream::binary);
         if (file_check) {
             file_check.close();
-            for (unsigned p = 0; p < zip_passes.size(); p++) zip_passes[p].clear();
-            zip_passes.clear(); // freeing memory
+
+            // freeing memory
+            for (unsigned p = 0; p < zip_samples.size(); p++) zip_samples[p].clear();
+            zip_samples.clear();
             params.clear();
             positions.clear();
-            zip_passes.resize(passes);
             mem_use = 0;
-            unsigned match_counter = 0;
-            unsigned pass_counter = 0;
+
             arg_string[2] = zipTempDir + dir_list[i] + zipExt; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
             std::cout << "Testing: " << arg_string[2] << std::endl;
             if (redefine.size() != 0) {
@@ -212,14 +204,17 @@ int main(int argc, char** argv) {
                 }
             }
 
-            unsigned min_zip_length = (unsigned) -1;
-            unsigned min_zip_index = 0;
+            std::vector<char> minimal_zip_sample;
+            unsigned minimal_zip_length = (unsigned) -1;
+            unsigned minimal_zip_passes = 0;
+            unsigned match_counter = 0;
+            unsigned pass_counter = 0;
             for (unsigned p = begin - 1; p < passes; p++) {
-                std::cout << "-------------------------------------\nPasses: " << (p + 1) << "/" << passes;
-                if (min_zip_length == (unsigned) -1) {
+                std::cout << "-------------------------------------\nPass: " << (p + 1) << "/" << passes;
+                if (minimal_zip_passes == 0) {
                     std::cout << std::endl;
                 } else {
-                    std::cout << ", minimal packed size: " << min_zip_length << " " << bypl(min_zip_length) << " (" << (min_zip_index + 1) << papl(min_zip_index + 1) << ")." << std::endl;
+                    std::cout << ", minimal packed size: " << minimal_zip_length << " " << bypl(minimal_zip_length) << " (" << (minimal_zip_passes) << papl(minimal_zip_passes) << ")." << std::endl;
                 }
                 if (redefine.size() == 0) {
                     //@for %%i in ("*.rdr" "*.geerdr" "*.drawinghand") do @for /L %%k in (1,1,80) do @"c:\Program Files\7-Zip\7z.exe" a -tzip -mx=9 -mmt=off -mtc=off -mfb=258 -mpass=%%k "%%~di%%~pizip\%%~ni%%~xi.%%k.zip" "%%i"
@@ -252,10 +247,10 @@ int main(int argc, char** argv) {
                         file_check.close();
                         if (zipSingle.size() != 0) {
                             // when packing to single archive, memory storage is not used and smaller size can still be packed
-                            if (zip_length > 0) if ((unsigned) zip_length < min_zip_length) {
-                                min_zip_length = zip_length;
-                                min_zip_index = p;
-                                pass_counter = p + 1;
+                            if (zip_length > 0) if ((unsigned) zip_length < minimal_zip_length) {
+                                minimal_zip_length = zip_length;
+                                minimal_zip_passes = p + 1;
+                                pass_counter = minimal_zip_passes;
                             }
                         }
                         goto passes_checked;
@@ -269,37 +264,45 @@ int main(int argc, char** argv) {
                         zip_pass1.resize(zip_length); // allocating memory
                         file_check.read(zip_pass1.data(), zip_length); // reading zip to memory
                         file_check.close();
-                        for (unsigned c = 0; c < p; c++) {
-                            if (zip_passes[c].size() == static_cast<size_t>(zip_length)) {
-                                if (memcmp(zip_passes[c].data(), zip_pass1.data(), zip_length) == 0) {
+                        for (unsigned c = 0; c < zip_samples.size(); c++) {
+                            if (zip_samples[c].size() == static_cast<size_t>(zip_length)) {
+                                if (memcmp(zip_samples[c].data(), zip_pass1.data(), zip_length) == 0) {
                                     match_counter++;
                                     std::cout << "Matched archives: " << match_counter << "/" << detect_threshold << std::endl;
-                                    zip_pass1.clear(); // sample is already present
+                                    zip_pass1.clear();
                                     if (match_counter == detect_threshold) {
                                         is_full = true;
                                         goto passes_checked;
-                                    } else
+                                    } else {
+                                        zip_samples.push_back(zip_samples[c]); // same sample, referencing previous copy
+                                        mem_use += zip_length; // but accounting memory, or mem_use will fall below 0 when reference will be deleted (it's simpler than checking all duplicates)
                                         goto pass_matched;
+                                    }
                                 }
                             }
                         }
-                        if ((unsigned) zip_length < min_zip_length) {
-                            min_zip_length = zip_length;
-                            min_zip_index = p;
-                        }
-                        zip_passes[p] = zip_pass1; // new archive sample, adding to array
+                        zip_samples.push_back(zip_pass1); // new sample, adding to array
                         mem_use += zip_length;
+                        if ((unsigned) zip_length < minimal_zip_length) {
+                            minimal_zip_sample = zip_pass1;
+                            minimal_zip_length = zip_length;
+                            minimal_zip_passes = pass_counter; // p + 1
+                        }
                         match_counter = 0;
 pass_matched:
-                        match_counter = match_counter; // "nop", because label before "}" causes error
+                        if (zip_samples.size() > detect_threshold) {
+                            mem_use -= zip_samples[0].size();
+                            zip_samples[0].clear();
+                            zip_samples.erase(zip_samples.cbegin());
+                        }
                     } else
                         file_check.close();
                 } else
                     std::cerr << "\nCan not open archive \"" << arg_string[2] << "\"." << std::endl;
             }
 passes_checked:
-            if (min_zip_length != (unsigned) -1) {
-                std::cout << "Minimum archive size: " << min_zip_length << " " << bypl(min_zip_length) << " (" << (min_zip_index + 1) << papl(min_zip_index + 1) << ")." << std::endl;
+            if (minimal_zip_passes != 0) {
+                std::cout << "Minimum archive size: " << minimal_zip_length << " " << bypl(minimal_zip_length) << " (" << (minimal_zip_passes) << papl(minimal_zip_passes) << ")." << std::endl;
             } else {
                 std::cout << "No archives were created." << std::endl;
             }
@@ -308,11 +311,11 @@ passes_checked:
 
             if (zipSingle.size() == 0) {
                 arcname_out = zipOutputDir + dir_list[i];
-                if (min_zip_length != (unsigned) -1) {
+                if (minimal_zip_passes != 0) {
                     if (show_passes) {
                         int d = std::floor(std::log10(passes)) + 1;
                         std::string f = "%0" + std::to_string(d) + "u";
-                        snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), (min_zip_index + 1));
+                        snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), minimal_zip_passes);
                         arcname_out = arcname_out + ".best" + std::string(path_buf);
                         snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), pass_counter);
                         arcname_out = arcname_out + ".of" + std::string(path_buf);
@@ -326,16 +329,16 @@ passes_checked:
                     if (!outfile) {
                         std::cerr << "\nError writing archive \"" << arcname_out << "\"." << std::endl;
                     } else {
-                        outfile.write(zip_passes[min_zip_index].data(), min_zip_length); // save smallest archive
+                        outfile.write(minimal_zip_sample.data(), minimal_zip_length); // save smallest archive
                         outfile.close();
                     }
                 } else
                     std::cerr << "\nError compressing archive \"" << arcname_out << ".#.#.#" << zipExt << "\"." << std::endl;
             } else { // single archive
-                if (min_zip_length != (unsigned) -1) {
+                if (minimal_zip_passes != 0) {
                     arcname_out = zipOutputDir + zipSingle;
                     if (redefine.size() == 0) {
-                        zip_cmd = arg_string[0] + " a -tzip -mx=9 -mmt=" + mmt + " -mtc=off -mfb=258 -mpass=" + std::to_string(min_zip_index + 1)
+                        zip_cmd = arg_string[0] + " a -tzip -mx=9 -mmt=" + mmt + " -mtc=off -mfb=258 -mpass=" + std::to_string(minimal_zip_passes)
                                   + " \"" + arcname_out + "\" \"" + arg_string[1] + "\"";
                     } else {
                         zip_cmd = redefine;
@@ -343,7 +346,7 @@ passes_checked:
                             zip_cmd.erase(positions[a], 2);
                             switch (params[a]) {
                             case -1: // pass
-                                zip_cmd.insert(positions[a], std::to_string(min_zip_index + 1));
+                                zip_cmd.insert(positions[a], std::to_string(minimal_zip_passes));
                             break;
                             case 2:  // output instead of temporary archive
                                 zip_cmd.insert(positions[a], arcname_out);
@@ -368,8 +371,8 @@ passes_checked:
     }
 
 //clean_end:
-    for (unsigned p = 0; p < zip_passes.size(); p++) zip_passes[p].clear();
-    zip_passes.clear();
+    for (unsigned p = 0; p < zip_samples.size(); p++) zip_samples[p].clear();
+    zip_samples.clear();
     params.clear();
     positions.clear();
     return 0;
