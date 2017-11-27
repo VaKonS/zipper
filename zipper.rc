@@ -5,8 +5,8 @@
 IDI_MAINICON ICON "zipper.ico"
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION 1,1,1,2
-PRODUCTVERSION 1,1,1,2
+FILEVERSION 1,2,0,0
+PRODUCTVERSION 1,2,0,0
 FILETYPE VFT_APP
 {
     BLOCK "StringFileInfo"
@@ -16,11 +16,11 @@ FILETYPE VFT_APP
             VALUE "CompanyName",      ""
             VALUE "LegalCopyright",   "Public domain."
             VALUE "FileDescription",  "Automates the search of passes number for 7-Zip ZIP compression."
-            VALUE "FileVersion",      "1.112"
+            VALUE "FileVersion",      "1.2"
             VALUE "InternalName",     "Zipper"
             VALUE "OriginalFilename", "zipper.exe"
             VALUE "ProductName",      "Zipper"
-            VALUE "ProductVersion",   "1.112"
+            VALUE "ProductVersion",   "1.2"
             VALUE "Comments",         "https://github.com/VaKonS/zipper"
         }
     }
