@@ -10,7 +10,7 @@ This program is public domain.
 ---
 ## Requirements:
 
-[7-Zip archiver](http://7-zip.org/) by Igor Pavlov.<br>
+[7-Zip archiver](http://7-zip.org/) by Igor Pavlov. Tested with 7-Zip v17.00.<br>
 To compile, [TCLAP](https://sourceforge.net/projects/tclap/) package is needed.
 
 ---
@@ -18,7 +18,7 @@ To compile, [TCLAP](https://sourceforge.net/projects/tclap/) package is needed.
 
 `zipper.exe -o "output_directory"`
 
-Will compress all files from current directory to "output_directory\file.extension.best#.of#.zip".<br>
+Will compress all files from current directory to "output_directory\file.extension.best#.of#.cycle#.zip".<br>
 *Try to use "/" or "\\\\" instead of "\\" in paths in case of errors.*
 
 ---
@@ -36,22 +36,25 @@ Compress into single archive (instead of separate archives by default).<br>
 **\-s** 0 *(zero)*<br>
 Disable adding ".best#.of#" to names of separate archives.<br>
 <br>
+**\-f** 0 *(zero)*<br>
+Omit ".cycle size/-" in names of separate archives (can help to find wrong results).<br>
+<br>
 **\-p** #<br>
-Limit number of search passes. Large values can be very slow.<br>
+Limit number of search passes. Large values can be *very* slow.<br>
 <br>
 **\-b** #<br>
 Begin from # passes. For example, when you need to continue a search.<br>
 <br>
+**\-d** #<br>
+Stop after # identical archives (detect compression cycling). Values higher than 12 are probably useless.<br>
+<br>
+**\-a** 1<br>
+Use old cycling detection. It's faster, but *maybe* skips results. So far both methods were finding same values, but it needs more testing.<br>
+<br>
 **\-m** off/#<br>
 Turn 7-Zip multithreading option off or limit number of threads.<br>
 <br>
-**\-d** #<br>
-Stop after # identical archives (detect compression cycling). Values higher than 24 are probably useless. Search with cycling compression is considered "complete".<br>
-<br>
-**\-f** 0 *(zero)*<br>
-Do not indicate by "+/-" in names of separate archives a complete/incomplete search ("incomplete" means that more passes can still make smaller archive).<br>
-<br>
-**\-c** "7-Zip_pathname"<br>
+**\-c** "7z.exe"<br>
 Manually set the pathname of 7-Zip executable.<br>
 <br>
 **\-r** "command_template"<br>
@@ -64,7 +67,7 @@ Redefine the archiving command. Template sequence `%c` is substituted with archi
 **Разница обычно в несколько байт, особого смысла в этом нет.**<br>
 Но если файлов очень много, несколько килобайт ужмутся.<br>
 <br>
-Для запуска требуется архиватор [7-Zip](http://7-zip.org/).<br>
+Для запуска требуется архиватор [7-Zip](http://7-zip.org/). Проверялась с версией 17.00<br>
 Для компиляции нужен пакет [TCLAP](https://sourceforge.net/projects/tclap/).<br>
 
 ---
@@ -89,20 +92,23 @@ Redefine the archiving command. Template sequence `%c` is substituted with archi
 **\-s** 0 *(ноль)*<br>
 Не добавлять к именам раздельных архивов ".best#.of#".<br>
 <br>
+**\-f** 0 *(ноль)*<br>
+Не добавлять к именам раздельных архивов ".cycle#" (найденный размер цикла, помогает отследить возможно неправильные результаты).<br>
+<br>
 **\-p** #<br>
 Ограничить количество попыток (100 по умолчанию).<br>
 <br>
 **\-b** #<br>
 Начать с # проходов. Например, если нужно продолжить поиск.<br>
 <br>
+**\-d** #<br>
+Останавливаться при # повторах сжатия. После тестов похоже, что значения выше 12 уже ничего не меняют.<br>
+<br>
+**\-a** 1<br>
+Определять зацикливание старым способом. Он быстрее, но не исключено, что пропускает результаты из-за меньшего числа попыток. Пока что у меня оба алгоритма дают одинаковые значения, но надо проверять.<br>
+<br>
 **\-m** off/#<br>
 Задать количество потоков для архиватора 7-Zip.<br>
-<br>
-**\-d** #<br>
-Останавливаться при # повторах сжатия. После тестов похоже, что значения выше 12 уже ничего не меняют. Поиск, начавший повторятся, считается "полным".<br>
-<br>
-**\-f** 0 *(ноль)*<br>
-Не показывать "+/-" в именах раздельных архивов, полный был поиск или нет (при "неполном" поиске меньший размер архива всё ещё возможен с большим количеством проходов).<br>
 <br>
 **\-c** "7z.exe"<br>
 Указать расположение архиватора 7z.exe.<br>
