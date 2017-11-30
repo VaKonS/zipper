@@ -19,7 +19,7 @@ const std::string zipExt = ".zip";
 
 
 // uninitialized data
-bool show_passes, show_full, is_full;
+bool show_passes, show_full, is_full, old_detection;
 unsigned passes, begin, detect_threshold;
 size_t mem_limit, mem_use;
 std::string zipTempDir, zipInputDir, zipOutputDir, arcname_out, mmt, redefine, zipSingle, zip_cmd;
@@ -51,8 +51,8 @@ std::string bypl(unsigned n) {return (n == 1) ? "byte" : "bytes";}
 int main(int argc, char** argv) {
 
     // definition of command line arguments   abcdefghijklmnopqrstuvwxyz
-    //                                        .bcd.f..i..lmnop.rst......
-    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.2");
+    //                                        abcd.f..i..lmnop.rst......
+    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.3");
 
     TCLAP::ValueArg<std::string> cmdInputDir("i", "input-mask",
                     "Directory with files to compress.\nRun Zipper from this directory to avoid paths inside archives. [.]", false,
@@ -87,7 +87,7 @@ int main(int argc, char** argv) {
                     512, "integer", cmd);
 
     TCLAP::ValueArg<int> cmdDetect("d", "detect-cycling",
-                    "Number of identical archives to stop.\nMore than 24 doesn't seem to make sense. [12]", false,
+                    "Number of identical archives to stop.\nMore than 12 doesn't seem to make sense. [12]", false,
                     12, "integer", cmd);
 
     TCLAP::ValueArg<bool> cmdShowPasses("s", "show-passes",
@@ -95,8 +95,12 @@ int main(int argc, char** argv) {
                     true, "boolean", cmd);
 
     TCLAP::ValueArg<bool> cmdShowFull("f", "show-fullness",
-                    "Indicate complete or incomplete search. [1 = yes]", false,
+                    "Show \"cycle size / unfinished search\" in names. [1 = yes]", false,
                     true, "boolean", cmd);
+
+    TCLAP::ValueArg<bool> cmdOld("a", "alternative-detection",
+                    "Use old cycling detection algorithm. [0 = no]", false,
+                    false, "boolean", cmd);
 
     TCLAP::ValueArg<std::string> cmdMMT("m", "multithreading",
                     "7-Zip multithreading = off/on/N threads. [on]", false,
@@ -126,9 +130,10 @@ int main(int argc, char** argv) {
     mmt                = cmdMMT.getValue();
     show_passes        = cmdShowPasses.getValue();
     show_full          = cmdShowFull.getValue();
-    detect_threshold   = std::min(cmdDetect.getValue(), static_cast<int>(passes + 1));
+    detect_threshold   = std::max(1, std::min(cmdDetect.getValue(), static_cast<int>(passes)));
     redefine           = cmdRedefine.getValue();
     zipSingle          = cmdSingle.getValue();
+    old_detection      = cmdOld.getValue();
 
     if (begin > passes) {
         std::cerr << "\nStarting number of passes is greater than total number (" << begin << " > " << passes << "). Stop." << std::endl;
@@ -208,7 +213,10 @@ int main(int argc, char** argv) {
             unsigned minimal_zip_length = (unsigned) -1;
             unsigned minimal_zip_passes = 0;
             unsigned match_counter = 0;
+//            unsigned total_matches = 0;
             unsigned pass_counter = 0;
+            unsigned cycle_size = 0;
+            zip_samples.resize(begin - 1); // initialize skipped passes with empty samples
             for (unsigned p = begin - 1; p < passes; p++) {
                 std::cout << "-------------------------------------\nPass: " << (p + 1) << "/" << passes;
                 if (minimal_zip_passes == 0) {
@@ -264,24 +272,62 @@ int main(int argc, char** argv) {
                         zip_pass1.resize(zip_length); // allocating memory
                         file_check.read(zip_pass1.data(), zip_length); // reading zip to memory
                         file_check.close();
-                        for (unsigned c = 0; c < zip_samples.size(); c++) {
+                        int t = (old_detection ? 1 : detect_threshold);
+                        for (int c = (zip_samples.size() - t); c >= 0; c--) {
                             if (zip_samples[c].size() == static_cast<size_t>(zip_length)) {
                                 if (memcmp(zip_samples[c].data(), zip_pass1.data(), zip_length) == 0) {
-                                    match_counter++;
-                                    std::cout << "Matched archives: " << match_counter << "/" << detect_threshold << std::endl;
-                                    zip_pass1.clear();
-                                    if (match_counter == detect_threshold) {
-                                        is_full = true;
-                                        goto passes_checked;
-                                    } else {
-                                        zip_samples.push_back(zip_samples[c]); // same sample, referencing previous copy
-                                        mem_use += zip_length; // but accounting memory, or mem_use will fall below 0 when reference will be deleted (it's simpler than checking all duplicates)
-                                        goto pass_matched;
+                                    if (old_detection) {
+                                        match_counter++;
+                                        std::cout << "Matched archives: " << match_counter << "/" << detect_threshold << std::endl;
+//                                        total_matches++; // one archive had minimal size with 365 passes, I wonder how many matches were accumulated to that point
+//                                        std::cout << "Matched archives: " << match_counter << "/" << detect_threshold << " (" << total_matches << " total)" << std::endl;
+                                        zip_pass1.clear();
+                                        cycle_size = detect_threshold;
+                                        if (match_counter == detect_threshold) {
+                                            is_full = true;
+                                            goto passes_checked;
+                                        } else {
+                                            zip_samples.push_back(zip_samples[c]); // same sample, referencing previous copy
+                                            goto sample_added;
+                                        }
+                                    } else { // new detection
+                                        cycle_size = p - c;
+                                        if (cycle_size >= detect_threshold) {
+                                            int cycle_start = c - cycle_size + 1;
+                                            if (cycle_start >= 0) {
+                                                //std::cout << "Possible cycle, size " << cycle_size << "." << std::endl;
+                                                for (unsigned d = cycle_start; d < static_cast<unsigned>(c); d++) {
+                                                    if (zip_samples[d].size() != zip_samples[d + cycle_size].size()) goto wrong_cycle;
+                                                    //std::cout << (d + 1) << ", " << (d + cycle_size + 1) << ", sizes are equal: " << zip_samples[d].size() << std::endl;
+                                                    if (memcmp(zip_samples[d].data(), zip_samples[d + cycle_size].data(), zip_samples[d].size()) != 0) goto wrong_cycle;
+                                                }
+                                                std::cout << "Compression cycling detected, " << cycle_size << " archives. More passes should not be necessary." << std::endl;
+                                                is_full = true;
+                                                zip_pass1.clear();
+                                                goto passes_checked;
+wrong_cycle:
+                                                //std::cout << "Wrong detection (data don't match)." << std::endl;
+                                                mem_use = mem_use; // "nop"
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
-                        zip_samples.push_back(zip_pass1); // new sample, adding to array
+                        if (!old_detection) { // in old algorithm any match will bypass this part, no need to check again
+                            for (unsigned c = 0; c < zip_samples.size(); c++) {
+                                if (zip_samples[c].size() == static_cast<size_t>(zip_length)) {
+                                    if (memcmp(zip_samples[c].data(), zip_pass1.data(), zip_length) == 0) {
+                                        //std::cout << "Matched sample, referencing previous copy." << std::endl;
+                                        zip_pass1.clear();
+                                        zip_samples.push_back(zip_samples[c]);
+                                        goto sample_added;
+                                    }
+                                }
+                            }
+                        }
+                        //std::cout << "Adding new archive." << std::endl;
+                        zip_samples.push_back(zip_pass1);
                         mem_use += zip_length;
                         if ((unsigned) zip_length < minimal_zip_length) {
                             minimal_zip_sample = zip_pass1;
@@ -289,12 +335,9 @@ int main(int argc, char** argv) {
                             minimal_zip_passes = pass_counter; // p + 1
                         }
                         match_counter = 0;
-pass_matched:
-                        if (zip_samples.size() > detect_threshold) {
-                            mem_use -= zip_samples[0].size();
-                            zip_samples[0].clear();
-                            zip_samples.erase(zip_samples.cbegin());
-                        }
+sample_added:
+                        mem_use = mem_use; // "nop"
+                        //zip_pass1.clear(); // TODO: can it be cleared?
                     } else
                         file_check.close();
                 } else
@@ -312,16 +355,22 @@ passes_checked:
             if (zipSingle.size() == 0) {
                 arcname_out = zipOutputDir + dir_list[i];
                 if (minimal_zip_passes != 0) {
+                    int d = std::floor(std::log10(passes)) + 1;
+                    std::string f = "%0" + std::to_string(d) + "u";
                     if (show_passes) {
-                        int d = std::floor(std::log10(passes)) + 1;
-                        std::string f = "%0" + std::to_string(d) + "u";
                         snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), minimal_zip_passes);
                         arcname_out = arcname_out + ".best" + std::string(path_buf);
                         snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), pass_counter);
                         arcname_out = arcname_out + ".of" + std::string(path_buf);
                     }
                     if (show_full) {
-                        arcname_out += (is_full ? ".+" : ".-");
+                        if (old_detection) {
+                            snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), detect_threshold);
+                            arcname_out = arcname_out + ".match" + (is_full ? std::string(path_buf) : "-");
+                        } else {
+                            snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), cycle_size);
+                            arcname_out = arcname_out + ".cycle" + (is_full ? std::string(path_buf) : "-");
+                        }
                     }
                     arcname_out += zipExt;
                     std::cout << "Writing \"" << arcname_out << "\"." << std::endl;
@@ -365,9 +414,9 @@ passes_checked:
                     break; // interrupt creation of single archive
                 }
             }
+            minimal_zip_sample.clear();
         } else
             std::cerr << "\nCan not open file \"" << arg_string[1] << "\"." << std::endl;
-
     }
 
 //clean_end:
