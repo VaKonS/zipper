@@ -213,7 +213,6 @@ int main(int argc, char** argv) {
             unsigned minimal_zip_length = (unsigned) -1;
             unsigned minimal_zip_passes = 0;
             unsigned match_counter = 0;
-//            unsigned total_matches = 0;
             unsigned pass_counter = 0;
             unsigned cycle_size = 0;
             zip_samples.resize(begin - 1); // initialize skipped passes with empty samples
@@ -272,16 +271,22 @@ int main(int argc, char** argv) {
                         zip_pass1.resize(zip_length); // allocating memory
                         file_check.read(zip_pass1.data(), zip_length); // reading zip to memory
                         file_check.close();
-                        int t = (old_detection ? 1 : detect_threshold);
-                        for (int c = (zip_samples.size() - t); c >= 0; c--) {
+                        int t, e;
+                        bool line_start = true;
+                        if (old_detection) {
+                            t = 1;
+                            e = 0;
+                        } else {
+                            t = detect_threshold;
+                            e = zip_samples.size() >> 1;
+                        }
+                        for (int c = (zip_samples.size() - t); c >= e; c--) {
                             if (zip_samples[c].size() == static_cast<size_t>(zip_length)) {
                                 if (memcmp(zip_samples[c].data(), zip_pass1.data(), zip_length) == 0) {
+                                    zip_pass1.clear();
                                     if (old_detection) {
                                         match_counter++;
                                         std::cout << "Matched archives: " << match_counter << "/" << detect_threshold << std::endl;
-//                                        total_matches++; // one archive had minimal size with 365 passes, I wonder how many matches were accumulated to that point
-//                                        std::cout << "Matched archives: " << match_counter << "/" << detect_threshold << " (" << total_matches << " total)" << std::endl;
-                                        zip_pass1.clear();
                                         cycle_size = detect_threshold;
                                         if (match_counter == detect_threshold) {
                                             is_full = true;
@@ -292,24 +297,25 @@ int main(int argc, char** argv) {
                                         }
                                     } else { // new detection
                                         cycle_size = p - c;
-                                        if (cycle_size >= detect_threshold) {
-                                            int cycle_start = c - cycle_size + 1;
-                                            if (cycle_start >= 0) {
-                                                //std::cout << "Possible cycle, size " << cycle_size << "." << std::endl;
-                                                for (unsigned d = cycle_start; d < static_cast<unsigned>(c); d++) {
-                                                    if (zip_samples[d].size() != zip_samples[d + cycle_size].size()) goto wrong_cycle;
-                                                    //std::cout << (d + 1) << ", " << (d + cycle_size + 1) << ", sizes are equal: " << zip_samples[d].size() << std::endl;
-                                                    if (memcmp(zip_samples[d].data(), zip_samples[d + cycle_size].data(), zip_samples[d].size()) != 0) goto wrong_cycle;
-                                                }
-                                                std::cout << "Compression cycling detected, " << cycle_size << " archives. More passes should not be necessary." << std::endl;
-                                                is_full = true;
-                                                zip_pass1.clear();
-                                                goto passes_checked;
-wrong_cycle:
-                                                //std::cout << "Wrong detection (data don't match)." << std::endl;
-                                                mem_use = mem_use; // "nop"
-                                            }
+                                        unsigned dc = 1;
+                                        int cycle_start = c - cycle_size + 1;
+                                        for (int d = cycle_start; d < c; d++) {
+                                            if (zip_samples[d].size() != zip_samples[d + cycle_size].size()) goto wrong_cycle;
+                                            if (memcmp(zip_samples[d].data(), zip_samples[d + cycle_size].data(), zip_samples[d].size()) != 0) goto wrong_cycle;
+                                            dc++;
                                         }
+                                        std::cout << (line_start ? "Cycle: " : ", ") << dc << "/" << cycle_size << ".\n"
+                                                     "Compression cycling detected, " << cycle_size << " archives. More passes should not be necessary." << std::endl;
+                                        is_full = true;
+                                        goto passes_checked;
+wrong_cycle:
+                                        if (line_start) {
+                                            std::cout << "Possible cycle(s): ";
+                                            line_start = false;
+                                        } else {
+                                            std::cout << ", ";
+                                        }
+                                        std::cout << dc << "/" << cycle_size;
                                     }
                                 }
                             }
@@ -336,8 +342,7 @@ wrong_cycle:
                         }
                         match_counter = 0;
 sample_added:
-                        mem_use = mem_use; // "nop"
-                        //zip_pass1.clear(); // TODO: can it be cleared?
+                        if (!line_start) std::cout << "." << std::endl;
                     } else
                         file_check.close();
                 } else
