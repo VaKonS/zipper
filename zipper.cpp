@@ -29,7 +29,7 @@ DIR * dir_handle;
 dirent * dir_entry;
 std::ifstream file_check;
 std::ofstream outfile;
-std::vector<std::vector<char>> zip_samples;
+std::vector<std::vector<char>> zip_samples, zip_pass1;
 std::vector<unsigned> cycleN_count;
 char path_buf[2048];
 MEMORYSTATUS mem_stat;
@@ -270,9 +270,9 @@ int main(int argc, char** argv) {
                     if (zip_length > 0) {
                         pass_counter = p + 1;
                         file_check.seekg(0, file_check.beg);
-                        std::vector<char> zip_pass1;
-                        zip_pass1.resize(zip_length); // allocating memory
-                        file_check.read(zip_pass1.data(), zip_length); // reading zip to memory
+                        zip_pass1.resize(1);
+                        zip_pass1[0].resize(zip_length); // allocating memory
+                        file_check.read(zip_pass1[0].data(), zip_length); // reading zip to memory
                         file_check.close();
                         int t, e;
                         bool line_start = true;
@@ -286,7 +286,7 @@ int main(int argc, char** argv) {
                         int add_index = -1;
                         for (int c = (zip_samples.size() - t); c >= e; c--) {
                             if (zip_samples[c].size() == static_cast<size_t>(zip_length)) {
-                                if (memcmp(zip_samples[c].data(), zip_pass1.data(), zip_length) == 0) {
+                                if (memcmp(zip_samples[c].data(), zip_pass1[0].data(), zip_length) == 0) {
                                     add_index = c;
                                     if (old_detection) {
                                         match_counter++;
@@ -294,6 +294,7 @@ int main(int argc, char** argv) {
                                         cycle_size = detect_threshold;
                                         if (match_counter == detect_threshold) {
                                             is_full = true;
+                                            zip_pass1[0].clear();
                                             zip_pass1.clear();
                                             goto passes_checked;
                                         } else
@@ -315,6 +316,7 @@ int main(int argc, char** argv) {
                                         std::cout << (line_start ? "Cycle: " : ", ") << dc << "/" << cycle_size << ".\n"
                                                      "Compression cycling detected, " << cycle_size << " archives. More passes should not be necessary." << std::endl;
                                         is_full = true;
+                                        zip_pass1[0].clear();
                                         zip_pass1.clear();
                                         goto passes_checked;
 wrong_cycle:
@@ -330,14 +332,16 @@ wrong_cycle:
                             }
                         }
                         if (add_index != -1) {
+                            zip_pass1[0].clear();
                             zip_pass1.clear();
                             zip_samples.push_back(zip_samples[add_index]); // same sample, referencing previous copy
                             goto sample_added;
 			} else {
                             for (unsigned c = 0; c < zip_samples.size(); c++) {
                                 if (zip_samples[c].size() == static_cast<size_t>(zip_length)) {
-                                    if (memcmp(zip_samples[c].data(), zip_pass1.data(), zip_length) == 0) {
+                                    if (memcmp(zip_samples[c].data(), zip_pass1[0].data(), zip_length) == 0) {
                                         //std::cout << "Matched sample, referencing previous copy." << std::endl;
+                                        zip_pass1[0].clear();
                                         zip_pass1.clear();
                                         zip_samples.push_back(zip_samples[c]);
                                         goto sample_added;
@@ -346,7 +350,8 @@ wrong_cycle:
                             }
                         }
                         //std::cout << "Adding new archive." << std::endl;
-                        zip_samples.push_back(zip_pass1);
+                        zip_samples.push_back(zip_pass1[0]);
+                        zip_pass1.clear();
                         mem_use += zip_length;
                         if ((unsigned) zip_length < minimal_zip_length) {
                             minimal_zip_sample = zip_samples.back(); //zip_samples[zip_samples.size() - 1];
