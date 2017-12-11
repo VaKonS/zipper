@@ -30,6 +30,7 @@ dirent * dir_entry;
 std::ifstream file_check;
 std::ofstream outfile;
 std::vector<std::vector<char>> zip_samples;
+std::vector<unsigned> cycleN_count;
 char path_buf[2048];
 MEMORYSTATUS mem_stat;
 std::vector<int> params; // arg_string[] indexes, -1 for pass number
@@ -215,6 +216,8 @@ int main(int argc, char** argv) {
             unsigned match_counter = 0;
             unsigned pass_counter = 0;
             unsigned cycle_size = 0;
+            cycleN_count.clear();
+            unsigned cycle_size_max = 0;
             zip_samples.resize(begin - 1); // initialize skipped passes with empty samples
             for (unsigned p = begin - 1; p < passes; p++) {
                 std::cout << "-------------------------------------\nPass: " << (p + 1) << "/" << passes;
@@ -297,6 +300,11 @@ int main(int argc, char** argv) {
                                             break;
                                     } else { // new detection
                                         cycle_size = p - c;
+                                        if (cycle_size_max < cycle_size) {
+                                            cycle_size_max = cycle_size;
+                                            cycleN_count.resize(cycle_size_max);
+                                        }
+                                        cycleN_count[cycle_size - 1]++;
                                         unsigned dc = 1;
                                         int cycle_start = c - cycle_size + 1;
                                         for (int d = cycle_start; d < c; d++) {
@@ -316,7 +324,7 @@ wrong_cycle:
                                         } else {
                                             std::cout << ", ";
                                         }
-                                        std::cout << dc << "/" << cycle_size;
+                                        std::cout << cycleN_count[cycle_size - 1] << "/" << cycle_size;
                                     }
                                 }
                             }
@@ -346,6 +354,8 @@ wrong_cycle:
                             minimal_zip_passes = pass_counter; // p + 1
                         }
                         match_counter = 0;
+                        cycleN_count.clear(); // reset all matches counters
+                        cycle_size_max = 0;
 sample_added:
                         if (!line_start) std::cout << "." << std::endl;
                     } else
