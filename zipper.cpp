@@ -280,21 +280,21 @@ int main(int argc, char** argv) {
                             t = detect_threshold;
                             e = zip_samples.size() >> 1;
                         }
+                        int add_index = -1;
                         for (int c = (zip_samples.size() - t); c >= e; c--) {
                             if (zip_samples[c].size() == static_cast<size_t>(zip_length)) {
                                 if (memcmp(zip_samples[c].data(), zip_pass1.data(), zip_length) == 0) {
-                                    zip_pass1.clear();
+                                    add_index = c;
                                     if (old_detection) {
                                         match_counter++;
                                         std::cout << "Matched archives: " << match_counter << "/" << detect_threshold << std::endl;
                                         cycle_size = detect_threshold;
                                         if (match_counter == detect_threshold) {
                                             is_full = true;
+                                            zip_pass1.clear();
                                             goto passes_checked;
-                                        } else {
-                                            zip_samples.push_back(zip_samples[c]); // same sample, referencing previous copy
-                                            goto sample_added;
-                                        }
+                                        } else
+                                            break;
                                     } else { // new detection
                                         cycle_size = p - c;
                                         unsigned dc = 1;
@@ -307,6 +307,7 @@ int main(int argc, char** argv) {
                                         std::cout << (line_start ? "Cycle: " : ", ") << dc << "/" << cycle_size << ".\n"
                                                      "Compression cycling detected, " << cycle_size << " archives. More passes should not be necessary." << std::endl;
                                         is_full = true;
+                                        zip_pass1.clear();
                                         goto passes_checked;
 wrong_cycle:
                                         if (line_start) {
@@ -320,7 +321,11 @@ wrong_cycle:
                                 }
                             }
                         }
-                        if (!old_detection) { // in old algorithm any match will bypass this part, no need to check again
+                        if (add_index != -1) {
+                            zip_pass1.clear();
+                            zip_samples.push_back(zip_samples[add_index]); // same sample, referencing previous copy
+                            goto sample_added;
+			} else {
                             for (unsigned c = 0; c < zip_samples.size(); c++) {
                                 if (zip_samples[c].size() == static_cast<size_t>(zip_length)) {
                                     if (memcmp(zip_samples[c].data(), zip_pass1.data(), zip_length) == 0) {
@@ -336,7 +341,7 @@ wrong_cycle:
                         zip_samples.push_back(zip_pass1);
                         mem_use += zip_length;
                         if ((unsigned) zip_length < minimal_zip_length) {
-                            minimal_zip_sample = zip_pass1;
+                            minimal_zip_sample = zip_samples.back(); //zip_samples[zip_samples.size() - 1];
                             minimal_zip_length = zip_length;
                             minimal_zip_passes = pass_counter; // p + 1
                         }
