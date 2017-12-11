@@ -113,11 +113,11 @@ int main(int argc, char** argv) {
 
     // parse command line arguments
     try {
-       	cmd.parse(argc, argv);
+        cmd.parse(argc, argv);
     } catch (std::exception &e) {
-	std::cerr << e.what() << std::endl;
+        std::cerr << e.what() << std::endl;
         std::cerr << "Error : cmd.parse() threw exception" << std::endl;
-	std::exit(-1);
+        std::exit(-1);
     }
 
     // command line accepted, begin console processing
@@ -138,7 +138,7 @@ int main(int argc, char** argv) {
 
     if (begin > passes) {
         std::cerr << "\nStarting number of passes is greater than total number (" << begin << " > " << passes << "). Stop." << std::endl;
-	std::exit(-1);
+        std::exit(-1);
     }
 
     //archiver short path
@@ -149,7 +149,7 @@ int main(int argc, char** argv) {
     if (tailSlash != std::string::npos) arg_string[0].erase(tailSlash + 1, arg_string[0].size());
     if (GetShortPathNameA(arg_string[0].c_str(), (LPSTR) &path_buf, sizeof(path_buf)) > sizeof(path_buf)) { //(lpszLongPath,lpszShortPath,cchBuffer)
         std::cerr << "Path buffer is too small." << std::endl;
-	std::exit(-1);
+        std::exit(-1);
     }
     arg_string[0] = std::string(path_buf) + "7z.exe"; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
     std::cout << "Archiver: \"" << arg_string[0] << "\"." << std::endl;
@@ -168,7 +168,7 @@ int main(int argc, char** argv) {
         closedir(dir_handle);
     } else {
         std::cerr << "\nError listing directory \"" << zipInputDir << "\"." << std::endl;
-	return EXIT_FAILURE;
+        return EXIT_FAILURE;
     }
 
     mem_stat.dwLength = sizeof(mem_stat);
@@ -336,7 +336,7 @@ wrong_cycle:
                             zip_pass1.clear();
                             zip_samples.push_back(zip_samples[add_index]); // same sample, referencing previous copy
                             goto sample_added;
-			} else {
+                        } else {
                             for (unsigned c = 0; c < zip_samples.size(); c++) {
                                 if (zip_samples[c].size() == static_cast<size_t>(zip_length)) {
                                     if (memcmp(zip_samples[c].data(), zip_pass1[0].data(), zip_length) == 0) {
