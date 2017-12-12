@@ -337,6 +337,8 @@ wrong_cycle:
                             zip_samples.push_back(zip_samples[add_index]); // same sample, referencing previous copy
                             goto sample_added;
                         } else {
+                            cycleN_count.clear(); // reset all matches counters
+                            cycle_size_max = 0;
                             for (unsigned c = 0; c < zip_samples.size(); c++) {
                                 if (zip_samples[c].size() == static_cast<size_t>(zip_length)) {
                                     if (memcmp(zip_samples[c].data(), zip_pass1[0].data(), zip_length) == 0) {
@@ -359,8 +361,6 @@ wrong_cycle:
                             minimal_zip_passes = pass_counter; // p + 1
                         }
                         match_counter = 0;
-                        cycleN_count.clear(); // reset all matches counters
-                        cycle_size_max = 0;
 sample_added:
                         if (!line_start) std::cout << "." << std::endl;
                     } else
