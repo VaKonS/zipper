@@ -186,7 +186,7 @@ int main(int argc, char** argv) {
             // freeing memory
             for (unsigned p = 0; p < zip_storage.size(); p++) zip_storage[p].clear();
             zip_storage.clear();
-            for (unsigned p = 0; p < passes; p++) zip_indices[p] = -1; // resetting indices, p < zip_indices.size()
+            memset(zip_indices.data(), -1, passes * sizeof(zip_indices[0])); //for (unsigned p = 0; p < zip_indices.size(); p++) zip_indices[p] = -1; // resetting indices
             params.clear();
             positions.clear();
             mem_use = 0;
