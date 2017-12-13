@@ -275,17 +275,11 @@ int main(int argc, char** argv) {
                         zip_pass1.resize(zip_length);
                         file_check.read(zip_pass1.data(), zip_length); // reading zip to memory
                         file_check.close();
-                        int t, e;
+                        int t;
                         bool line_start = true;
-                        if (old_detection) {
-                            t = 1;
-                            e = 0;
-                        } else {
-                            t = detect_threshold;
-                            e = p >> 1;
-                        }
+                        if (old_detection) t = 1; else t = detect_threshold;
                         int add_index = -1;
-                        for (int c = (p - t); c >= e; c--) {
+                        for (int c = (p - t); c >= 0; c--) {
                             if (zip_indices[c] != -1) {
                                 if (zip_storage[zip_indices[c]].size() == static_cast<size_t>(zip_length)) {
                                     if (memcmp(zip_storage[zip_indices[c]].data(), zip_pass1.data(), zip_length) == 0) {
@@ -306,20 +300,22 @@ int main(int argc, char** argv) {
                                                 cycleN_count.resize(cycle_size_max);
                                             }
                                             cycleN_count[cycle_size - 1]++;
-                                            unsigned dc = 1;
                                             int cycle_start = c - cycle_size + 1;
-                                            for (int d = cycle_start; d < c; d++) {
-                                                int r  = zip_indices[d];
-                                                if (r == -1) goto wrong_cycle;
-                                                int r1 = zip_indices[d + cycle_size];
-                                                if (zip_storage[r].size() != zip_storage[r1].size()) goto wrong_cycle;
-                                                if (memcmp(zip_storage[r].data(), zip_storage[r1].data(), zip_storage[r].size()) != 0) goto wrong_cycle;
-                                                dc++;
+                                            if (cycle_start >= 0) {
+                                                unsigned dc = 1;
+                                                for (int d = cycle_start; d < c; d++) {
+                                                    int r  = zip_indices[d];
+                                                    if (r == -1) goto wrong_cycle;
+                                                    int r1 = zip_indices[d + cycle_size];
+                                                    if (zip_storage[r].size() != zip_storage[r1].size()) goto wrong_cycle;
+                                                    if (memcmp(zip_storage[r].data(), zip_storage[r1].data(), zip_storage[r].size()) != 0) goto wrong_cycle;
+                                                    dc++;
+                                                }
+                                                std::cout << (line_start ? "Cycle: " : ", ") << dc << "/" << cycle_size << ".\n"
+                                                             "Compression cycling detected, " << cycle_size << " archives. More passes should not be necessary." << std::endl;
+                                                is_full = true;
+                                                goto passes_checked;
                                             }
-                                            std::cout << (line_start ? "Cycle: " : ", ") << dc << "/" << cycle_size << ".\n"
-                                                         "Compression cycling detected, " << cycle_size << " archives. More passes should not be necessary." << std::endl;
-                                            is_full = true;
-                                            goto passes_checked;
 wrong_cycle:
                                             if (line_start) {
                                                 std::cout << "Possible cycle(s): ";
@@ -341,7 +337,7 @@ wrong_cycle:
                             // reseting matches counters
                             cycleN_count.clear();
                             cycle_size_max = 0;
-                            // e...(p-t) already checked, comparing the rest
+                            // 0...(p-t) already checked, comparing the rest
                             for (unsigned c = std::max(0, static_cast<int>(p) - t + 1); c < p; c++) {
                                 if (zip_indices[c] != -1) {
                                     if (zip_storage[zip_indices[c]].size() == static_cast<size_t>(zip_length)) {
@@ -353,30 +349,6 @@ wrong_cycle:
                                     }
                                 }
                             }
-                            for (int c = e - 1; c >= 0; c--) {
-                                if (zip_indices[c] != -1) {
-                                    if (zip_storage[zip_indices[c]].size() == static_cast<size_t>(zip_length)) {
-                                        if (memcmp(zip_storage[zip_indices[c]].data(), zip_pass1.data(), zip_length) == 0) {
-                                            //std::cout << "Same sample, referencing previous copy." << std::endl;
-                                            zip_indices[p] = zip_indices[c];
-                                            goto sample_added;
-                                        }
-                                    }
-                                }
-                            }
-                            /*
-                            for (unsigned c = 0; c < p; c++) {
-                                if (zip_indices[c] != -1) {
-                                    if (zip_storage[zip_indices[c]].size() == static_cast<size_t>(zip_length)) {
-                                        if (memcmp(zip_storage[zip_indices[c]].data(), zip_pass1.data(), zip_length) == 0) {
-                                            //std::cout << "Same sample, referencing previous copy." << std::endl;
-                                            zip_indices[p] = zip_indices[c];
-                                            goto sample_added;
-                                        }
-                                    }
-                                }
-                            }
-                            */
                         }
                         //std::cout << "Adding new archive." << std::endl;
                         zip_indices[p] = zip_storage.size();
