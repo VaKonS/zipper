@@ -19,7 +19,11 @@ To compile, [TCLAP](https://sourceforge.net/projects/tclap/) package is needed.
 `zipper.exe -o "output_directory"`
 
 Will compress all files from current directory to "output_directory\file.extension.best#.of#.cycle#.zip".<br>
-*Try to use "/" or "\\\\" instead of "\\" in paths in case of errors.*
+*Try to use "/" or "\\\\" instead of "\\" in paths in case of errors.*<br>
+<br>
+### Current limitation:
+Do not compress subfolders to single archive.<br>
+When adding files, not folders, 7-Zip will strip file paths, and **all files will be in root folder of archive.**
 
 ---
 ## Tuning:
@@ -75,7 +79,11 @@ Redefine the archiving command. Template sequence `%c` is substituted with archi
 `zipper.exe -o "папка_для_архивов"`<br>
 <br>
 Сожмёт все файлы из текущего каталога в "папку для архивов".<br>
-*При ошибках попробуйте заменить в путях "\\" на "/" или "\\\\".*
+*При ошибках попробуйте заменить в путях "\\" на "/" или "\\\\".*<br>
+<br>
+### Ограничение на данный момент:
+Не сжимайте папки в один архив.<br>
+7-Zip убирает пути, если в архив добавляется файл, а не папка. **Все файлы будут в корне архива.**
 
 ---
 Дополнительные параметры:<br>
