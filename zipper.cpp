@@ -225,7 +225,7 @@ int main(int argc, char** argv) {
 
     mem_stat.dwLength = sizeof(mem_stat);
     zip_indices.resize(passes);
-    for (unsigned i = 0; i < dir_list.size(); i++) if ((dir_list[i] != ".") && (dir_list[i] != "..")) {
+    for (unsigned i = 0; i < dir_list.size(); i++) {
         is_full = false;
         arg_string[1] = zipInputDir + dir_list[i]; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
         std::cout << "\n-------------------------------------\nFile: " << arg_string[1] << std::endl;
