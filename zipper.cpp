@@ -25,6 +25,7 @@ size_t mem_limit, mem_use;
 std::string zipTempDir, zipInputDir, zipOutputDir, arcname_out, mmt, redefine, zipSingle, zip_cmd;
 std::string arg_string[4]; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
 std::vector<std::string> dir_list;
+std::vector<bool> dir_subdirs;
 DIR * dir_handle;
 dirent * dir_entry;
 std::ifstream file_check;
@@ -40,6 +41,24 @@ std::vector<size_t> positions;
 
 
 // ----------------------------------------------------------
+size_t path_length(std::string i) { // drive's "current directory" (i. e. "a:" without slash) will not be found
+    size_t s = i.find_last_of('/');
+    size_t b = i.find_last_of('\\');
+    if (s == std::string::npos) s = b;
+    if (b != std::string::npos) if (b > s) s = b;
+    if (s != std::string::npos) s++; else s = 0;
+    return s;
+}
+
+std::string ShortPath(std::string pn) {
+    std::string p = pn.substr(0, path_length(pn));
+    if (GetShortPathNameA(p.c_str(), (LPSTR) &path_buf, sizeof(path_buf)) > sizeof(path_buf)) { //(lpszLongPath,lpszShortPath,cchBuffer)
+        std::cerr << "Path buffer is too small." << std::endl;
+	std::exit(-1);
+    }
+    return std::string(path_buf);
+}
+
 std::string trailSlash(std::string s) {
     unsigned c = s.size();
     if (c == 0) return "";
@@ -55,7 +74,7 @@ int main(int argc, char** argv) {
 
     // definition of command line arguments   abcdefghijklmnopqrstuvwxyz
     //                                        abcd.f..i..lmnop.rst......
-    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.33");
+    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.4");
 
     TCLAP::ValueArg<std::string> cmdInputDir("i", "input-mask",
                     "Directory with files to compress.\nRun Zipper from this directory to avoid paths inside archives. [.]", false,
@@ -143,17 +162,8 @@ int main(int argc, char** argv) {
         std::exit(-1);
     }
 
-    //archiver short path
-    size_t tailSlash = arg_string[0].find_last_of('/'); // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
-    size_t tailBackslash = arg_string[0].find_last_of('\\');
-    if (tailSlash == std::string::npos) tailSlash = tailBackslash;
-    if (tailBackslash != std::string::npos) if (tailBackslash > tailSlash) tailSlash = tailBackslash;
-    if (tailSlash != std::string::npos) arg_string[0].erase(tailSlash + 1, arg_string[0].size());
-    if (GetShortPathNameA(arg_string[0].c_str(), (LPSTR) &path_buf, sizeof(path_buf)) > sizeof(path_buf)) { //(lpszLongPath,lpszShortPath,cchBuffer)
-        std::cerr << "Path buffer is too small." << std::endl;
-        std::exit(-1);
-    }
-    arg_string[0] = std::string(path_buf) + "7z.exe"; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
+    //archiver's short path
+    arg_string[0] = ShortPath(arg_string[0]) + "7z.exe";
     std::cout << "Archiver: \"" << arg_string[0] << "\"." << std::endl;
 
     arg_string[3] = "%"; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
@@ -162,16 +172,56 @@ int main(int argc, char** argv) {
     zipOutputDir = trailSlash(zipOutputDir);
     if (zipTempDir == "") { zipTempDir = zipOutputDir; } else zipTempDir = trailSlash(zipTempDir);
 
-    dir_handle = opendir(zipInputDir.c_str());
-    if (dir_handle != NULL) {
-        std::cout << "Opened directory \"" << zipInputDir << "\"." << std::endl;
-        while ((dir_entry = readdir(dir_handle)) != NULL)
-            dir_list.push_back(std::string(dir_entry->d_name));
-        closedir(dir_handle);
-    } else {
-        std::cerr << "\nError listing directory \"" << zipInputDir << "\"." << std::endl;
-        return EXIT_FAILURE;
+    // making recursive input directory listing
+    dir_list.push_back("");
+    dir_subdirs.push_back(true);
+    int subdir_index = 0;
+    while (subdir_index != -1) {
+        std::string recursiveDir = trailSlash(zipInputDir + dir_list[subdir_index]);
+        dir_handle = opendir(recursiveDir.c_str());
+        if (dir_handle != NULL) {
+            std::cout << "Opened directory \"" << recursiveDir << "\"." << std::endl;
+            while ((dir_entry = readdir(dir_handle)) != NULL) {
+                std::string n(dir_entry->d_name);
+                //TODO: Unicode?
+                int t = GetFileAttributesA((recursiveDir + n).c_str());
+                if (t == -1) {
+                    closedir(dir_handle);
+                    std::cerr << "\nError reading attributes of \"" << (recursiveDir + n) << "\"." << std::endl;
+                    return EXIT_FAILURE;
+                }
+                if (((t & FILE_ATTRIBUTE_DIRECTORY) == 0) || ((n != ".") && (n != ".."))) { // file or dir except ./..
+                    dir_list.push_back(trailSlash(dir_list[subdir_index]) + n);
+                    dir_subdirs.push_back((t & FILE_ATTRIBUTE_DIRECTORY) != 0);
+                }
+            }
+            closedir(dir_handle);
+        } else {
+            std::cerr << "\nError listing directory \"" << recursiveDir << "\"." << std::endl;
+            return EXIT_FAILURE;
+        }
+/*
+        std::cout << "Full list:" << std::endl;
+        for (unsigned i = 0; i < dir_subdirs.size(); i++)
+            std::cout << (dir_subdirs[i] ? "?" : "") << dir_list[i] << std::endl;
+        std::cout << "subdir_index:" << subdir_index << std::endl;
+//*/
+        dir_list.erase(dir_list.begin() + subdir_index);
+        dir_subdirs.erase(dir_subdirs.begin() + subdir_index);
+        subdir_index = -1;
+        for (unsigned i = 0; i < dir_subdirs.size(); i++) if (dir_subdirs[i]) {
+            subdir_index = i;
+            break;
+        }
     }
+    std::cout << "Found " << dir_list.size() << " file(s)." << std::endl;
+/*
+    std::cout << "Files:" << std::endl;
+    for (unsigned i = 0; i < dir_subdirs.size(); i++)
+        std::cout << (dir_subdirs[i] ? "?" : "") << dir_list[i] << std::endl;
+//*/
+    dir_subdirs.clear();
+
 
     mem_stat.dwLength = sizeof(mem_stat);
     zip_indices.resize(passes);
@@ -191,7 +241,7 @@ int main(int argc, char** argv) {
             positions.clear();
             mem_use = 0;
 
-            arg_string[2] = zipTempDir + dir_list[i] + zipExt; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
+            arg_string[2] = zipTempDir + dir_list[i].substr(path_length(dir_list[i])) + zipExt; // only name
             std::cout << "Testing: " << arg_string[2] << std::endl;
             if (redefine.size() != 0) {
                 size_t l = 0;
@@ -397,6 +447,13 @@ passes_checked:
                         }
                     }
                     arcname_out += zipExt;
+                    std::string out_subdir = arcname_out.substr(0, path_length(arcname_out) - 1);
+                    if (GetFileAttributesA(out_subdir.c_str()) == (unsigned) -1) {
+                        std::cout << "Creating subdirectory \"" << out_subdir << "\"." << std::endl;
+                        if (mkdir(out_subdir.c_str()) != 0) {
+                            std::cerr << "\nError making directory \"" << out_subdir << "\"." << std::endl;
+                        }
+                    }
                     std::cout << "Writing \"" << arcname_out << "\"." << std::endl;
                     outfile = std::ofstream(arcname_out, std::ofstream::binary);
                     if (!outfile) {
@@ -411,6 +468,7 @@ passes_checked:
                 if (minimal_zip_passes != 0) {
                     arcname_out = zipOutputDir + zipSingle;
                     if (redefine.size() == 0) {
+                        //TODO: how to add *single* "path\file" to the archive with relative path kept?
                         zip_cmd = arg_string[0] + " a -tzip -mx=9 -mmt=" + mmt + " -mtc=off -mfb=258 -mpass=" + std::to_string(minimal_zip_passes)
                                   + " \"" + arcname_out + "\" \"" + arg_string[1] + "\"";
                     } else {
