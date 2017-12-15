@@ -55,7 +55,7 @@ std::string ShortPath(std::string pn) {
     std::string p = pn.substr(0, path_length(pn));
     if (GetShortPathNameA(p.c_str(), (LPSTR) &path_buf, sizeof(path_buf)) > sizeof(path_buf)) { //(lpszLongPath,lpszShortPath,cchBuffer)
         std::cerr << "Path buffer is too small." << std::endl;
-	std::exit(-1);
+        std::exit(-1);
     }
     return std::string(path_buf);
 }
@@ -163,15 +163,38 @@ int main(int argc, char** argv) {
         std::exit(-1);
     }
 
-    //archiver's short path
-    arg_string[0] = ShortPath(arg_string[0]) + "7z.exe";
+    arg_string[0] = ShortPath(arg_string[0]) + "7z.exe"; //archiver's short pathname
     std::cout << "Archiver: \"" << arg_string[0] << "\"." << std::endl;
 
     arg_string[3] = "%"; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
 
+    // parsing command template
+    params.clear();
+    positions.clear();
+    if (redefine.size() != 0) {
+        size_t l = 0;
+        while (l < redefine.npos) {
+            size_t a = redefine.find("%i", l);
+            size_t b = redefine.find("%o", l);
+            size_t c = redefine.find("%p", l);
+            size_t d = redefine.find("%c", l);
+            size_t e = redefine.find("%%", l);
+            l = std::min(std::min(std::min(std::min(a, b), c), d), e);
+            if (l < redefine.npos) {
+                if      (l == a) params.push_back(1);  // input
+                else if (l == b) params.push_back(2);  // temp archive
+                else if (l == c) params.push_back(-1); // pass
+                else if (l == d) params.push_back(0);  // archiver
+                else if (l == e) params.push_back(3);  // %
+                positions.push_back(l);
+                l = l + 2;
+            }
+        }
+    }
+
     zipInputDir = trailSlash(zipInputDir);
     zipOutputDir = trailSlash(zipOutputDir);
-    if (zipTempDir == "") { zipTempDir = zipOutputDir; } else zipTempDir = trailSlash(zipTempDir);
+    if (zipTempDir.size() == 0) zipTempDir = zipOutputDir; else zipTempDir = trailSlash(zipTempDir);
 
     // making recursive input directory listing
     dir_list.push_back("");
@@ -201,12 +224,6 @@ int main(int argc, char** argv) {
             std::cerr << "\nError listing directory \"" << recursiveDir << "\"." << std::endl;
             return EXIT_FAILURE;
         }
-/*
-        std::cout << "Full list:" << std::endl;
-        for (unsigned i = 0; i < dir_subdirs.size(); i++)
-            std::cout << (dir_subdirs[i] ? "?" : "") << dir_list[i] << std::endl;
-        std::cout << "subdir_index:" << subdir_index << std::endl;
-//*/
         dir_list.erase(dir_list.begin() + subdir_index);
         dir_subdirs.erase(dir_subdirs.begin() + subdir_index);
         subdir_index = -1;
@@ -216,11 +233,6 @@ int main(int argc, char** argv) {
         }
     }
     std::cout << "Found " << dir_list.size() << " file(s)." << std::endl;
-/*
-    std::cout << "Files:" << std::endl;
-    for (unsigned i = 0; i < dir_subdirs.size(); i++)
-        std::cout << (dir_subdirs[i] ? "?" : "") << dir_list[i] << std::endl;
-//*/
     dir_subdirs.clear();
 
 
@@ -230,45 +242,23 @@ int main(int argc, char** argv) {
         cycleN_count.resize(passes);
         cycleN_match.resize(passes);
     }
+
+    // processing file list
     for (unsigned i = 0; i < dir_list.size(); i++) {
-        is_full = false;
         arg_string[1] = zipInputDir + dir_list[i]; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
         std::cout << "\n-------------------------------------\nFile: " << arg_string[1] << std::endl;
         file_check = std::ifstream(arg_string[1], std::ifstream::binary);
         if (file_check) {
             file_check.close();
 
-            // freeing memory
-            for (unsigned p = 0; p < zip_storage.size(); p++) zip_storage[p].clear();
-            zip_storage.clear();
-            zip_indices.assign(passes, -1); //memset(zip_indices.data(), -1, passes * sizeof(zip_indices[0])); //for (unsigned p = 0; p < zip_indices.size(); p++) zip_indices[p] = -1; // resetting indices
-            params.clear();
-            positions.clear();
-            mem_use = 0;
-
-            arg_string[2] = zipTempDir + dir_list[i].substr(path_length(dir_list[i])) + zipExt; // only name
+            arg_string[2] = zipTempDir + dir_list[i].substr(path_length(dir_list[i])) + zipExt; // input name without path
             std::cout << "Testing: " << arg_string[2] << std::endl;
-            if (redefine.size() != 0) {
-                size_t l = 0;
-                while (l < redefine.npos) {
-                    size_t a = redefine.find("%i", l);
-                    size_t b = redefine.find("%o", l);
-                    size_t c = redefine.find("%p", l);
-                    size_t d = redefine.find("%c", l);
-                    size_t e = redefine.find("%%", l);
-                    l = std::min(std::min(std::min(std::min(a, b), c), d), e);
-                    if (l < redefine.npos) {
-                        if      (l == a) params.push_back(1);  // input
-                        else if (l == b) params.push_back(2);  // temp archive
-                        else if (l == c) params.push_back(-1); // pass
-                        else if (l == d) params.push_back(0);  // archiver
-                        else if (l == e) params.push_back(3);  // %
-                        positions.push_back(l);
-                        l = l + 2;
-                    }
-                }
-            }
 
+            for (unsigned p = 0; p < zip_storage.size(); p++) zip_storage[p].clear(); // freeing memory
+            zip_storage.clear();
+            zip_indices.assign(passes, -1); // resetting indices
+            mem_use = 0;
+            is_full = false;
             unsigned minimal_zip_length = (unsigned) -1;
             unsigned minimal_zip_passes = 0;
             unsigned match_counter = 0;
@@ -283,7 +273,6 @@ int main(int argc, char** argv) {
                     std::cout << ", minimal packed size: " << minimal_zip_length << " " << bypl(minimal_zip_length) << " (" << (minimal_zip_passes) << papl(minimal_zip_passes) << ")." << std::endl;
                 }
                 if (redefine.size() == 0) {
-                    //@for %%i in ("*.rdr" "*.geerdr" "*.drawinghand") do @for /L %%k in (1,1,80) do @"c:\Program Files\7-Zip\7z.exe" a -tzip -mx=9 -mmt=off -mtc=off -mfb=258 -mpass=%%k "%%~di%%~pizip\%%~ni%%~xi.%%k.zip" "%%i"
                     zip_cmd = arg_string[0] + " a -tzip -mx=9 -mmt=" + mmt + " -mtc=off -mfb=258 -mpass=" + std::to_string(p + 1)
                               + " \"" + arg_string[2] + "\" \"" + arg_string[1] + "\"";
                 } else {
@@ -311,12 +300,11 @@ int main(int argc, char** argv) {
                     if (((mem_use + zip_length) > mem_limit) || (static_cast<size_t>(zip_length) > mem_stat.dwAvailPhys)) {
                         std::cout << "\nNo memory left to store archives.\nChoosing from what was saved so far..." << std::endl;
                         file_check.close();
-                        if (zipSingle.size() != 0) {
-                            // when packing to single archive, memory storage is not used and smaller size can still be packed
+                        if (zipSingle.size() != 0) { // when packing to single archive, memory storage is not used and smaller size can still be packed
                             if (zip_length > 0) if ((unsigned) zip_length < minimal_zip_length) {
+                                pass_counter = p + 1;
                                 minimal_zip_length = zip_length;
-                                minimal_zip_passes = p + 1;
-                                pass_counter = minimal_zip_passes;
+                                minimal_zip_passes = pass_counter;
                             }
                         }
                         goto passes_checked;
@@ -473,7 +461,7 @@ passes_checked:
                             case -1: // pass
                                 zip_cmd.insert(positions[a], std::to_string(minimal_zip_passes));
                             break;
-                            case 2:  // output instead of temporary archive
+                            case 2:  // output archive
                                 zip_cmd.insert(positions[a], arcname_out);
                             break;
                             default: // archiver, input file, %
@@ -496,6 +484,8 @@ passes_checked:
 
 //clean_end:
     zip_indices.clear();
+    cycleN_count.clear();
+    cycleN_match.clear();
     for (unsigned p = 0; p < zip_storage.size(); p++) zip_storage[p].clear();
     zip_storage.clear();
     params.clear();
