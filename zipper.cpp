@@ -366,17 +366,20 @@ wrong_cycle:                                ; //nop
                         }
                         if (!old_detection) { // matches in old detection already bypassed this part
                             if (add_index != -1) {
-                                std::cout << "Possible cycle(s): ";
                                 bool line_start = true;
                                 for (unsigned c = 0; c < passes; c++) {
                                     if (cycleN_match[c]) {
                                         cycleN_count[c]++;
-                                        if (line_start) line_start = false; else std::cout << ", ";
-                                        std::cout << cycleN_count[c] << "/" << cycle_size;
+                                        if (line_start) {
+                                            line_start = false;
+                                            std::cout << "Possible cycle(s): ";
+                                        } else
+                                            std::cout << ", ";
+                                        std::cout << cycleN_count[c] << "/" << (c + 1);
                                     } else
                                         cycleN_count[c] = 0;
                                 }
-                                std::cout << "." << std::endl;
+                                if (!line_start) std::cout << "." << std::endl;
                                 //std::cout << "Matched sample, referencing previous copy." << std::endl;
                                 zip_indices[p] = zip_indices[add_index];
                                 goto sample_added;
