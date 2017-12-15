@@ -34,6 +34,7 @@ std::vector<std::vector<char>> zip_storage;
 std::vector<int> zip_indices; // zip_storage indices
 std::vector<char> zip_pass1;
 std::vector<unsigned> cycleN_count;
+std::vector<bool> cycleN_match;
 char path_buf[2048];
 MEMORYSTATUS mem_stat;
 std::vector<int> params; // arg_string[] indices, -1 for pass number
@@ -74,7 +75,7 @@ int main(int argc, char** argv) {
 
     // definition of command line arguments   abcdefghijklmnopqrstuvwxyz
     //                                        abcd.f..i..lmnop.rst......
-    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.4");
+    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.41");
 
     TCLAP::ValueArg<std::string> cmdInputDir("i", "input-mask",
                     "Directory with files to compress.\nRun Zipper from this directory to avoid paths inside archives. [.]", false,
@@ -225,6 +226,10 @@ int main(int argc, char** argv) {
 
     mem_stat.dwLength = sizeof(mem_stat);
     zip_indices.resize(passes);
+    if (!old_detection) {
+        cycleN_count.resize(passes);
+        cycleN_match.resize(passes);
+    }
     for (unsigned i = 0; i < dir_list.size(); i++) {
         is_full = false;
         arg_string[1] = zipInputDir + dir_list[i]; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
@@ -236,7 +241,7 @@ int main(int argc, char** argv) {
             // freeing memory
             for (unsigned p = 0; p < zip_storage.size(); p++) zip_storage[p].clear();
             zip_storage.clear();
-            memset(zip_indices.data(), -1, passes * sizeof(zip_indices[0])); //for (unsigned p = 0; p < zip_indices.size(); p++) zip_indices[p] = -1; // resetting indices
+            zip_indices.assign(passes, -1); //memset(zip_indices.data(), -1, passes * sizeof(zip_indices[0])); //for (unsigned p = 0; p < zip_indices.size(); p++) zip_indices[p] = -1; // resetting indices
             params.clear();
             positions.clear();
             mem_use = 0;
@@ -269,8 +274,7 @@ int main(int argc, char** argv) {
             unsigned match_counter = 0;
             unsigned pass_counter = 0;
             unsigned cycle_size = 0;
-            cycleN_count.clear();
-            unsigned cycle_size_max = 0;
+            cycleN_count.assign(passes, 0);
             for (unsigned p = begin - 1; p < passes; p++) {
                 std::cout << "-------------------------------------\nPass: " << (p + 1) << "/" << passes;
                 if (minimal_zip_passes == 0) {
@@ -325,12 +329,10 @@ int main(int argc, char** argv) {
                         zip_pass1.resize(zip_length);
                         file_check.read(zip_pass1.data(), zip_length); // reading zip to memory
                         file_check.close();
-                        int t;
-                        bool line_start = true;
-                        if (old_detection) t = 1; else t = detect_threshold;
                         int add_index = -1;
-                        for (int c = (p - t); c >= 0; c--) {
-                            if (zip_indices[c] != -1) {
+                        if (!old_detection) cycleN_match.assign(passes, false);
+                        for (int c = p - 1; c >= 0; c--) {
+                            if (zip_indices[c] != -1) { // for skipped passes
                                 if (zip_storage[zip_indices[c]].size() == static_cast<size_t>(zip_length)) {
                                     if (memcmp(zip_storage[zip_indices[c]].data(), zip_pass1.data(), zip_length) == 0) {
                                         add_index = c;
@@ -341,65 +343,59 @@ int main(int argc, char** argv) {
                                             if (match_counter == detect_threshold) {
                                                 is_full = true;
                                                 goto passes_checked;
-                                            } else
-                                                break;
+                                            } else {
+                                                //std::cout << "Match, referencing previous copy." << std::endl;
+                                                zip_indices[p] = zip_indices[add_index];
+                                                goto sample_added;
+                                            }
                                         } else { // new detection
                                             cycle_size = p - c;
-                                            if (cycle_size_max < cycle_size) {
-                                                cycle_size_max = cycle_size;
-                                                cycleN_count.resize(cycle_size_max);
-                                            }
-                                            cycleN_count[cycle_size - 1]++;
-                                            int cycle_start = c - cycle_size + 1;
-                                            if (cycle_start >= 0) {
-                                                unsigned dc = 1;
-                                                for (int d = cycle_start; d < c; d++) {
-                                                    int r  = zip_indices[d];
-                                                    if (r == -1) goto wrong_cycle;
-                                                    int r1 = zip_indices[d + cycle_size];
-                                                    if (zip_storage[r].size() != zip_storage[r1].size()) goto wrong_cycle;
-                                                    if (memcmp(zip_storage[r].data(), zip_storage[r1].data(), zip_storage[r].size()) != 0) goto wrong_cycle;
-                                                    dc++;
+                                            if (cycle_size >= detect_threshold) {
+                                                cycleN_match[cycle_size - 1] = true;
+                                                int cycle_start = c - cycle_size + 1; // 1st match already found
+                                                if (cycle_start >= 0) {
+                                                    unsigned dc = 1;
+                                                    for (int d = cycle_start; d < c; d++) {
+                                                        int r  = zip_indices[d];
+                                                        if (r == -1) goto wrong_cycle;
+                                                        int r1 = zip_indices[d + cycle_size];
+                                                        if (r1 == -1) goto wrong_cycle;
+                                                        if (zip_storage[r].size() != zip_storage[r1].size()) goto wrong_cycle;
+                                                        if (memcmp(zip_storage[r].data(), zip_storage[r1].data(), zip_storage[r].size()) != 0) goto wrong_cycle;
+                                                        dc++;
+                                                    }
+                                                    std::cout << //"Cycle: " << dc << "/" << cycle_size << ".\n"
+                                                                 "Compression cycling detected, " << cycle_size << " archives. More passes should not be necessary." << std::endl;
+                                                    is_full = true;
+                                                    goto passes_checked;
                                                 }
-                                                std::cout << (line_start ? "Cycle: " : ", ") << dc << "/" << cycle_size << ".\n"
-                                                             "Compression cycling detected, " << cycle_size << " archives. More passes should not be necessary." << std::endl;
-                                                is_full = true;
-                                                goto passes_checked;
                                             }
-wrong_cycle:
-                                            if (line_start) {
-                                                std::cout << "Possible cycle(s): ";
-                                                line_start = false;
-                                            } else {
-                                                std::cout << ", ";
-                                            }
-                                            std::cout << cycleN_count[cycle_size - 1] << "/" << cycle_size;
+wrong_cycle:                                ; //nop
                                         }
                                     }
                                 }
                             }
                         }
-                        if (add_index != -1) {
-                            //std::cout << "Matched sample, referencing previous copy." << std::endl;
-                            zip_indices[p] = zip_indices[add_index];
-                            goto sample_added;
-                        } else {
-                            // reseting matches counters
-                            cycleN_count.clear();
-                            cycle_size_max = 0;
-                            // 0...(p-t) already checked, comparing the rest
-                            for (unsigned c = std::max(0, static_cast<int>(p) - t + 1); c < p; c++) {
-                                if (zip_indices[c] != -1) {
-                                    if (zip_storage[zip_indices[c]].size() == static_cast<size_t>(zip_length)) {
-                                        if (memcmp(zip_storage[zip_indices[c]].data(), zip_pass1.data(), zip_length) == 0) {
-                                            //std::cout << "Same sample, referencing previous copy." << std::endl;
-                                            zip_indices[p] = zip_indices[c];
-                                            goto sample_added;
-                                        }
-                                    }
+                        if (!old_detection) { // matches in old detection already bypassed this part
+                            if (add_index != -1) {
+                                std::cout << "Possible cycle(s): ";
+                                bool line_start = true;
+                                for (unsigned c = 0; c < passes; c++) {
+                                    if (cycleN_match[c]) {
+                                        cycleN_count[c]++;
+                                        if (line_start) line_start = false; else std::cout << ", ";
+                                        std::cout << cycleN_count[c] << "/" << cycle_size;
+                                    } else
+                                        cycleN_count[c] = 0;
                                 }
-                            }
-                        }
+                                std::cout << "." << std::endl;
+                                //std::cout << "Matched sample, referencing previous copy." << std::endl;
+                                zip_indices[p] = zip_indices[add_index];
+                                goto sample_added;
+                            } else
+                                cycleN_count.assign(passes, 0); // resetting matches counters
+                        } else
+                            match_counter = 0; // new detection does not use match_counter
                         //std::cout << "Adding new archive." << std::endl;
                         zip_indices[p] = zip_storage.size();
                         zip_storage.emplace_back(); // empty sample
@@ -409,9 +405,7 @@ wrong_cycle:
                             minimal_zip_length = zip_length;
                             minimal_zip_passes = pass_counter; // p + 1
                         }
-                        match_counter = 0;
-sample_added:
-                        if (!line_start) std::cout << "." << std::endl;
+sample_added:           ; //nop
                     } else
                         file_check.close();
                 } else
@@ -439,7 +433,7 @@ passes_checked:
                     }
                     if (show_full) {
                         if (old_detection) {
-                            snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), detect_threshold);
+                            snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), match_counter);
                             arcname_out = arcname_out + ".match" + (is_full ? std::string(path_buf) : "-");
                         } else {
                             snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), cycle_size);
