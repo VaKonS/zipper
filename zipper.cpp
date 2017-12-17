@@ -16,6 +16,7 @@
 // ----------------------------------------------------------
 // initialized data
 const std::string zipExt = ".zip";
+bool auto_passes = false;
 
 
 // uninitialized data
@@ -35,6 +36,7 @@ std::vector<int> zip_indices; // zip_storage indices
 std::vector<char> zip_pass1;
 std::vector<unsigned> cycleN_count;
 std::vector<bool> cycleN_match;
+std::vector<unsigned> cycleN_sizes;
 char path_buf[2048];
 MEMORYSTATUS mem_stat;
 std::vector<int> params; // arg_string[] indices, -1 for pass number
@@ -75,7 +77,7 @@ int main(int argc, char** argv) {
 
     // definition of command line arguments   abcdefghijklmnopqrstuvwxyz
     //                                        abcd.f..i..lmnop.rst......
-    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.41");
+    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.42");
 
     TCLAP::ValueArg<std::string> cmdInputDir("i", "input-mask",
                     "Directory with files to compress.\nRun Zipper from this directory to avoid paths inside archives. [.]", false,
@@ -98,8 +100,8 @@ int main(int argc, char** argv) {
                     "c:\\Program Files\\7-Zip\\7z.exe", "string", cmd);
 
     TCLAP::ValueArg<int> cmdPasses("p", "passes",
-                    "Passes limit. [100]", false,
-                    100, "integer", cmd);
+                    "Passes limit, set to 100 for relatively fast, but incomplete check. [0 = auto]", false,
+                    0, "integer", cmd);
 
     TCLAP::ValueArg<int> cmdStart("b", "begin",
                     "Start passes value. Useful to continue interrupted test. [1]", false,
@@ -147,16 +149,25 @@ int main(int argc, char** argv) {
     zipTempDir         = cmdTempDir.getValue();
     zipInputDir        = cmdInputDir.getValue();
     zipOutputDir       = cmdOutputDir.getValue();
-    passes             = cmdPasses.getValue();
+    passes             = std::max(0, cmdPasses.getValue());
     begin              = std::max(cmdStart.getValue(), 1);
     mem_limit          = cmdMemLimit.getValue() << 20;
     mmt                = cmdMMT.getValue();
     show_passes        = cmdShowPasses.getValue();
     show_full          = cmdShowFull.getValue();
-    detect_threshold   = std::max(1, std::min(cmdDetect.getValue(), static_cast<int>(passes)));
     redefine           = cmdRedefine.getValue();
     zipSingle          = cmdSingle.getValue();
     old_detection      = cmdOld.getValue();
+    detect_threshold   = std::max(1, std::min(cmdDetect.getValue(), ((passes != 0) ? static_cast<int>(passes) : (int) -1)));
+    if (passes < 1) {
+        if (!old_detection) {
+            auto_passes = true;
+            passes = std::max(1728, (int) detect_threshold) * 3; //1728 = 24*24*3
+        } else {
+            std::cerr << "Old detection does not find cycles. Setting passes to 1728." << std::endl;
+            passes = 1728;
+        }
+    }
 
     if (begin > passes) {
         std::cerr << "\nStarting number of passes is greater than total number (" << begin << " > " << passes << "). Stop." << std::endl;
@@ -241,6 +252,7 @@ int main(int argc, char** argv) {
     if (!old_detection) {
         cycleN_count.resize(passes);
         cycleN_match.resize(passes);
+        cycleN_sizes.resize(passes);
     }
 
     // processing file list
@@ -264,8 +276,14 @@ int main(int argc, char** argv) {
             unsigned match_counter = 0;
             unsigned pass_counter = 0;
             unsigned cycle_size = 0;
-            cycleN_count.assign(passes, 0);
-            for (unsigned p = begin - 1; p < passes; p++) {
+            unsigned max_cycle = 0;
+            unsigned max_cycle_start = 0;
+            if (!old_detection) {
+                cycleN_count.assign(passes, 0);
+                cycleN_sizes.assign(passes, 0);
+            }
+            unsigned p = begin - 1;
+            while (p < passes) {
                 std::cout << "-------------------------------------\nPass: " << (p + 1) << "/" << passes;
                 if (minimal_zip_passes == 0) {
                     std::cout << std::endl;
@@ -338,8 +356,8 @@ int main(int argc, char** argv) {
                                             }
                                         } else { // new detection
                                             cycle_size = p - c;
+                                            cycleN_match[cycle_size - 1] = true;
                                             if (cycle_size >= detect_threshold) {
-                                                cycleN_match[cycle_size - 1] = true;
                                                 int cycle_start = c - cycle_size + 1; // 1st match already found
                                                 if (cycle_start >= 0) {
                                                     unsigned dc = 1;
@@ -369,17 +387,75 @@ wrong_cycle:                                ; //nop
                                 bool line_start = true;
                                 for (unsigned c = 0; c < passes; c++) {
                                     if (cycleN_match[c]) {
+                                        //std::cout << "cycleN_match[" << c + 1 << "]" << std::endl;
                                         cycleN_count[c]++;
+                                        //std::cout << "cycleN_count[c]: " << cycleN_count[c] << std::endl;
                                         if (line_start) {
+                                            if (auto_passes) {
+                                                // checking minimal cycle sizes array
+                                                //24  48  72  96  120 144 168 192 216 240 264 288 312 336 360 384 408 432 456 480 504 528 552 576 600 624 648 672 696 720 744 ... 1440
+                                                //                        *1                          *2                          *3                          *4                          --------
+                                                //                    *1                      *2                      *3                      *4                      *5                  --------
+                                                //                *1                  *2                  *3                  *4                  *5                  *6          *
+                                                //            *1              *2              *3              *4              *5              *6              *7                  *       --------
+                                                //        *1          *2          *3          *4          *5          *6          *7          *8          *9          *10         *
+                                                //    *1      *2      *3      *4      *5      *6      *7      *8      *9      *10     *11     *12     *13     *14     *15         *       --------
+                                                //*1  *2  *3  *4  *5  *6  *7  *8  *9  *10 *11 *12 *13 *14 *15 *16 *17 *18 *19 *20 *21 *22 *23 *24 *25 *26 *27 *28 *29 *30 *       *
+                                                //------------------------------------------------------------------------------------------------------------------------------------
+                                                //                *1                  *2                  *3                  *4                  *5                  *6          *
+                                                //        *1          *2          *3          *4          *5          *6          *7          *8          *9          *10         *
+                                                for (unsigned k = 0; k < passes; k++) {
+                                                    unsigned cs = cycleN_sizes[k];
+                                                    //std::cout << "cycleN_sizes[" << k << "]: " << cs << std::endl;
+                                                    if (cs == 0) { // end of array, new minimal cycle found
+                                                        cs = c + 1;
+                                                        cycleN_sizes[k] = cs;
+                                                        // searching minimal multiple of all sizes
+                                                        unsigned multiple = cs;
+                                                        for (unsigned l = 0; l < k; l++) {
+                                                            for (unsigned n = 1; n <= cs; n++) {
+                                                                unsigned m = cycleN_sizes[l] * n;
+                                                                if ((m % cs) == 0) {
+                                                                    if (m > multiple) multiple = m;
+                                                                    break;
+                                                                }
+                                                            }
+                                                        }
+                                                        //std::cout << "Found multiple: " << multiple << std::endl;
+                                                        if (multiple > max_cycle) {
+                                                            max_cycle = multiple;
+                                                            if (max_cycle_start == 0) max_cycle_start = p - cs;
+                                                            //std::cout << "Found max_cycle: " << max_cycle << ", start: " << max_cycle_start << ", passes: " << passes << std::endl;
+                                                            if ((max_cycle * 3) > passes) {
+                                                                unsigned prev_passes = passes;
+                                                                passes = max_cycle * 7;
+                                                                zip_indices.resize(passes);
+                                                                cycleN_count.resize(passes);
+                                                                cycleN_match.resize(passes);
+                                                                cycleN_sizes.resize(passes);
+                                                                for (unsigned l = prev_passes; l < passes; l++) {
+                                                                    zip_indices[l] = -1;
+                                                                    //cycleN_count[l] = 0;
+                                                                    //cycleN_match[l] = 0;
+                                                                    //cycleN_sizes[l] = 0;
+                                                                }
+                                                                //std::cout << "New passes maximum: " << passes << std::endl;
+                                                            }
+                                                        }
+                                                        break;
+                                                    }
+                                                    if (cs == (c + 1)) break; // minimal cycle size is already present
+                                                }
+                                            }
                                             line_start = false;
-                                            std::cout << "Possible cycle(s): ";
+                                            if (!auto_passes) std::cout << "Possible cycle(s): ";
                                         } else
-                                            std::cout << ", ";
-                                        std::cout << cycleN_count[c] << "/" << (c + 1);
+                                            if (!auto_passes) std::cout << ", ";
+                                        if (!auto_passes) std::cout << cycleN_count[c] << "/" << (c + 1);
                                     } else
                                         cycleN_count[c] = 0;
                                 }
-                                if (!line_start) std::cout << "." << std::endl;
+                                if (!line_start) if (!auto_passes) std::cout << "." << std::endl;
                                 //std::cout << "Matched sample, referencing previous copy." << std::endl;
                                 zip_indices[p] = zip_indices[add_index];
                                 goto sample_added;
@@ -396,11 +472,12 @@ wrong_cycle:                                ; //nop
                             minimal_zip_length = zip_length;
                             minimal_zip_passes = pass_counter; // p + 1
                         }
-sample_added:           ; //nop
+sample_added:           if (auto_passes) std::cout << "Estimated cycle: " << max_cycle << ", total passes: " << (max_cycle_start + max_cycle * 2) << std::endl;
                     } else
                         file_check.close();
                 } else
                     std::cerr << "\nCan not open archive \"" << arg_string[2] << "\"." << std::endl;
+                p++;
             }
 passes_checked:
             if (minimal_zip_passes != 0) {
