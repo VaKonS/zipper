@@ -389,35 +389,24 @@ wrong_cycle:                                ; //nop
                                 bool line_start = true;
                                 for (unsigned c = 0; c < passes; c++) {
                                     if (cycleN_match[c]) {
-                                        //std::cout << "cycleN_match[" << c + 1 << "]" << std::endl;
+                                        unsigned c1 = c + 1;
+                                        //std::cout << "cycleN_match[" << c1 << "]" << std::endl;
                                         cycleN_count[c]++;
                                         //std::cout << "cycleN_count[c]: " << cycleN_count[c] << std::endl;
                                         if (line_start) {
                                             if (auto_passes) {
                                                 // checking minimal cycle sizes array
-                                                //24  48  72  96  120 144 168 192 216 240 264 288 312 336 360 384 408 432 456 480 504 528 552 576 600 624 648 672 696 720 744 ... 1440
-                                                //                        *1                          *2                          *3                          *4                          --------
-                                                //                    *1                      *2                      *3                      *4                      *5                  --------
-                                                //                *1                  *2                  *3                  *4                  *5                  *6          *
-                                                //            *1              *2              *3              *4              *5              *6              *7                  *       --------
-                                                //        *1          *2          *3          *4          *5          *6          *7          *8          *9          *10         *
-                                                //    *1      *2      *3      *4      *5      *6      *7      *8      *9      *10     *11     *12     *13     *14     *15         *       --------
-                                                //*1  *2  *3  *4  *5  *6  *7  *8  *9  *10 *11 *12 *13 *14 *15 *16 *17 *18 *19 *20 *21 *22 *23 *24 *25 *26 *27 *28 *29 *30 *       *
-                                                //------------------------------------------------------------------------------------------------------------------------------------
-                                                //                *1                  *2                  *3                  *4                  *5                  *6          *
-                                                //        *1          *2          *3          *4          *5          *6          *7          *8          *9          *10         *
                                                 for (unsigned k = 0; k < passes; k++) {
                                                     unsigned cs = cycleN_sizes[k];
                                                     //std::cout << "cycleN_sizes[" << k << "]: " << cs << std::endl;
                                                     if (cs == 0) { // end of array, new minimal cycle found
-                                                        cs = c + 1;
-                                                        cycleN_sizes[k] = cs;
+                                                        cycleN_sizes[k] = c1;
                                                         // searching minimal multiple of all sizes
-                                                        unsigned multiple = cs;
+                                                        unsigned multiple = c1;
                                                         for (unsigned l = 0; l < k; l++) {
-                                                            for (unsigned n = 1; n <= cs; n++) {
+                                                            for (unsigned n = 1; n <= c1; n++) {
                                                                 unsigned m = cycleN_sizes[l] * n;
-                                                                if ((m % cs) == 0) {
+                                                                if ((m % c1) == 0) {
                                                                     if (m > multiple) multiple = m;
                                                                     break;
                                                                 }
@@ -445,22 +434,19 @@ wrong_cycle:                                ; //nop
                                                         }
                                                         break;
                                                     }
-                                                    if (cs == (c + 1)) break; // minimal cycle size is already present
-                                                }
-                                                //std::cout << "\ncycleN_match[" << c + 1 << "]" << std::endl;
-                                                if (cycleN_count[c] == 1) { // cycle is re/started
-                                                    //std::cout << "Cycle " << c + 1 << " is started." << std::endl;
-                                                    if (max_cycle == (c + 1)) { // cycle is estimated
-                                                        max_cycle_start = p - max_cycle; //p - (c + 1);
-                                                        //std::cout << "max_cycle_start: " << (max_cycle_start + 1) << std::endl;
-                                                    }
+                                                    if (cs == c1) break; // minimal cycle size is already present
                                                 }
                                             }
                                             line_start = false;
                                             std::cout << "Possible cycle(s): ";
                                         } else
                                             std::cout << ", ";
-                                        std::cout << cycleN_count[c] << "/" << (c + 1);
+                                        std::cout << cycleN_count[c] << "/" << c1;
+                                        if (cycleN_count[c] == 1) { // cycle is re/started
+                                            if (max_cycle == c1) { // cycle is estimated
+                                                max_cycle_start = p - c1;
+                                            }
+                                        }
                                     } else
                                         cycleN_count[c] = 0;
                                 }
