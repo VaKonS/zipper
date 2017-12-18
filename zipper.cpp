@@ -394,48 +394,46 @@ wrong_cycle:                                ; //nop
                                         cycleN_count[c]++;
                                         //std::cout << "cycleN_count[c]: " << cycleN_count[c] << std::endl;
                                         if (line_start) {
-                                            if (auto_passes) {
-                                                // checking minimal cycle sizes array
-                                                for (unsigned k = 0; k < passes; k++) {
-                                                    unsigned cs = cycleN_sizes[k];
-                                                    //std::cout << "cycleN_sizes[" << k << "]: " << cs << std::endl;
-                                                    if (cs == 0) { // end of array, new minimal cycle found
-                                                        cycleN_sizes[k] = c1;
-                                                        // searching minimal multiple of all sizes
-                                                        unsigned multiple = c1;
-                                                        for (unsigned l = 0; l < k; l++) {
-                                                            for (unsigned n = 1; n <= c1; n++) {
-                                                                unsigned m = cycleN_sizes[l] * n;
-                                                                if ((m % c1) == 0) {
-                                                                    if (m > multiple) multiple = m;
-                                                                    break;
-                                                                }
+                                            // checking minimal cycle sizes array
+                                            for (unsigned k = 0; k < passes; k++) {
+                                                unsigned cs = cycleN_sizes[k];
+                                                //std::cout << "cycleN_sizes[" << k << "]: " << cs << std::endl;
+                                                if (cs == 0) { // end of array, new minimal cycle found
+                                                    cycleN_sizes[k] = c1;
+                                                    // searching minimal multiple of all sizes
+                                                    unsigned multiple = c1;
+                                                    for (unsigned l = 0; l < k; l++) {
+                                                        for (unsigned n = 1; n <= c1; n++) {
+                                                            unsigned m = cycleN_sizes[l] * n;
+                                                            if ((m % c1) == 0) {
+                                                                if (m > multiple) multiple = m;
+                                                                break;
                                                             }
                                                         }
-                                                        //std::cout << "Found multiple: " << multiple << std::endl;
-                                                        if (multiple > max_cycle) {
-                                                            max_cycle = multiple;
-                                                            //std::cout << "Found max_cycle: " << max_cycle << ", start: " << max_cycle_start << ", passes: " << passes << std::endl;
-                                                            if ((max_cycle * 3) > passes) {
-                                                                unsigned prev_passes = passes;
-                                                                passes = max_cycle * 7;
-                                                                zip_indices.resize(passes);
-                                                                cycleN_count.resize(passes);
-                                                                cycleN_match.resize(passes);
-                                                                cycleN_sizes.resize(passes);
-                                                                for (unsigned l = prev_passes; l < passes; l++) {
-                                                                    zip_indices[l] = -1;
-                                                                    //cycleN_count[l] = 0;
-                                                                    //cycleN_match[l] = 0;
-                                                                    //cycleN_sizes[l] = 0;
-                                                                }
-                                                                //std::cout << "New passes maximum: " << passes << std::endl;
-                                                            }
-                                                        }
-                                                        break;
                                                     }
-                                                    if (cs == c1) break; // minimal cycle size is already present
+                                                    //std::cout << "Found multiple: " << multiple << std::endl;
+                                                    if (multiple > max_cycle) {
+                                                        max_cycle = multiple;
+                                                        //std::cout << "Found max_cycle: " << max_cycle << ", start: " << max_cycle_start << ", passes: " << passes << std::endl;
+                                                        if (auto_passes and ((max_cycle * 3) > passes)) {
+                                                            unsigned prev_passes = passes;
+                                                            passes = max_cycle * 7;
+                                                            zip_indices.resize(passes);
+                                                            cycleN_count.resize(passes);
+                                                            cycleN_match.resize(passes);
+                                                            cycleN_sizes.resize(passes);
+                                                            for (unsigned l = prev_passes; l < passes; l++) {
+                                                                zip_indices[l] = -1;
+                                                                //cycleN_count[l] = 0;
+                                                                //cycleN_match[l] = 0;
+                                                                //cycleN_sizes[l] = 0;
+                                                            }
+                                                            //std::cout << "New passes maximum: " << passes << std::endl;
+                                                        }
+                                                    }
+                                                    break;
                                                 }
+                                                if (cs == c1) break; // minimal cycle size is already present
                                             }
                                             line_start = false;
                                             std::cout << "Possible cycle(s): ";
