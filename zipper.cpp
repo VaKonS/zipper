@@ -158,16 +158,18 @@ int main(int argc, char** argv) {
     redefine           = cmdRedefine.getValue();
     zipSingle          = cmdSingle.getValue();
     old_detection      = cmdOld.getValue();
-    detect_threshold   = std::max(1, std::min(cmdDetect.getValue(), ((passes != 0) ? static_cast<int>(passes) : (int) -1)));
+    detect_threshold   = std::max((unsigned) 1, std::min((unsigned) cmdDetect.getValue(), ((passes != 0) ? (unsigned) passes : (unsigned) -1)));
     if (passes < 1) {
         if (!old_detection) {
             auto_passes = true;
-            passes = std::max(1728, (int) detect_threshold) * 3; //1728 = 24*24*3
+            passes = std::max(576, (int) detect_threshold) * 3; //1728 = 24*24*3
         } else {
             std::cerr << "Old detection does not find cycles. Setting passes to 1728." << std::endl;
             passes = 1728;
         }
     }
+    //std::cout << "passes: " << passes << std::endl;
+    //std::cout << "detect_threshold: " << detect_threshold << std::endl;
 
     if (begin > passes) {
         std::cerr << "\nStarting number of passes is greater than total number (" << begin << " > " << passes << "). Stop." << std::endl;
@@ -356,8 +358,8 @@ int main(int argc, char** argv) {
                                             }
                                         } else { // new detection
                                             cycle_size = p - c;
-                                            cycleN_match[cycle_size - 1] = true;
                                             if (cycle_size >= detect_threshold) {
+                                                cycleN_match[cycle_size - 1] = true;
                                                 int cycle_start = c - cycle_size + 1; // 1st match already found
                                                 if (cycle_start >= 0) {
                                                     unsigned dc = 1;
@@ -424,7 +426,6 @@ wrong_cycle:                                ; //nop
                                                         //std::cout << "Found multiple: " << multiple << std::endl;
                                                         if (multiple > max_cycle) {
                                                             max_cycle = multiple;
-                                                            if (max_cycle_start == 0) max_cycle_start = p - cs;
                                                             //std::cout << "Found max_cycle: " << max_cycle << ", start: " << max_cycle_start << ", passes: " << passes << std::endl;
                                                             if ((max_cycle * 3) > passes) {
                                                                 unsigned prev_passes = passes;
@@ -446,16 +447,24 @@ wrong_cycle:                                ; //nop
                                                     }
                                                     if (cs == (c + 1)) break; // minimal cycle size is already present
                                                 }
+                                                //std::cout << "\ncycleN_match[" << c + 1 << "]" << std::endl;
+                                                if (cycleN_count[c] == 1) { // cycle is re/started
+                                                    //std::cout << "Cycle " << c + 1 << " is started." << std::endl;
+                                                    if (max_cycle == (c + 1)) { // cycle is estimated
+                                                        max_cycle_start = p - max_cycle; //p - (c + 1);
+                                                        //std::cout << "max_cycle_start: " << (max_cycle_start + 1) << std::endl;
+                                                    }
+                                                }
                                             }
                                             line_start = false;
-                                            if (!auto_passes) std::cout << "Possible cycle(s): ";
+                                            std::cout << "Possible cycle(s): ";
                                         } else
-                                            if (!auto_passes) std::cout << ", ";
-                                        if (!auto_passes) std::cout << cycleN_count[c] << "/" << (c + 1);
+                                            std::cout << ", ";
+                                        std::cout << cycleN_count[c] << "/" << (c + 1);
                                     } else
                                         cycleN_count[c] = 0;
                                 }
-                                if (!line_start) if (!auto_passes) std::cout << "." << std::endl;
+                                if (!line_start) std::cout << "." << std::endl;
                                 //std::cout << "Matched sample, referencing previous copy." << std::endl;
                                 zip_indices[p] = zip_indices[add_index];
                                 goto sample_added;
@@ -472,7 +481,7 @@ wrong_cycle:                                ; //nop
                             minimal_zip_length = zip_length;
                             minimal_zip_passes = pass_counter; // p + 1
                         }
-sample_added:           if (auto_passes) std::cout << "Estimated cycle: " << max_cycle << ", total passes: " << (max_cycle_start + max_cycle * 2) << std::endl;
+sample_added:           if (max_cycle > 0) std::cout << "Estimated cycle: " << max_cycle << ", total passes: " << (max_cycle_start + max_cycle * 2) << "." << std::endl;
                     } else
                         file_check.close();
                 } else
