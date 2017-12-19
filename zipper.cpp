@@ -472,7 +472,7 @@ sample_added:           ; //nop
                 } else
                     std::cerr << "\nCan not open archive \"" << arg_string[2] << "\"." << std::endl;
                 if (max_cycle > 0) std::cout << "Estimated cycle: " << max_cycle << ", total passes: " << (max_cycle_start + max_cycle * 2) << "." << std::endl;
-                if (matched_once) std::cout << "Matched archives: " << match_counter << "/" << detect_threshold << std::endl;
+                if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold << std::endl;
                 p++;
             }
 passes_checked:
@@ -488,7 +488,7 @@ passes_checked:
                 arcname_out = zipOutputDir + dir_list[i];
                 if (minimal_zip_passes != 0) {
                     int d = std::floor(std::log10(passes)) + 1;
-                    d = auto_passes ? std::max(8, d) : d;
+                    if (auto_passes) d = std::max(8, d); //d = auto_passes ? std::max(8, d) : d;
                     std::string f = "%0" + std::to_string(d) + "u";
                     if (show_passes) {
                         snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), minimal_zip_passes);
