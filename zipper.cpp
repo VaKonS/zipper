@@ -338,6 +338,8 @@ int main(int argc, char** argv) {
                         zip_pass1.resize(zip_length);
                         file_check.read(zip_pass1.data(), zip_length); // reading zip to memory
                         file_check.close();
+                        std::cout << "Removing \"" << arg_string[2] << "\"." << std::endl;
+                        remove(arg_string[2].c_str());
                         int add_index = -1;
                         if (!old_detection) cycleN_match.assign(passes, false);
                         for (int c = p - 1; c >= 0; c--) {
