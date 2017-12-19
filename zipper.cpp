@@ -453,7 +453,7 @@ sample_added:           ; //nop
                 p++;
                 if (auto_passes and (p >= passes)) {
                     unsigned prev_passes = passes;
-                    passes = (p + passes + max_cycle_start + max_cycle) * 3;
+                    passes = (passes + max_cycle_start + max_cycle) * 3;
                     //std::cout << "New passes maximum: " << passes << std::endl;
                     zip_indices.resize(passes);
                     for (unsigned l = prev_passes; l < passes; l++) zip_indices[l] = -1;
