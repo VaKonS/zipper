@@ -162,10 +162,10 @@ int main(int argc, char** argv) {
     if (passes < 1) {
         if (!old_detection) {
             auto_passes = true;
-            passes = std::max(576, (int) detect_threshold) * 3; //1728 = 24*24*3
+            passes = std::max(576, (int) detect_threshold) * 3 + begin - 1; //1728 = 24*24*3
         } else {
-            std::cerr << "Old detection does not find cycles. Setting passes to 1728." << std::endl;
-            passes = 1728;
+            passes = 1727 + begin;
+            std::cerr << "Old detection does not find cycles. Setting passes to " << passes << "." << std::endl;
         }
     }
     //std::cout << "passes: " << passes << std::endl;
