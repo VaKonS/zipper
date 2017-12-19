@@ -353,6 +353,7 @@ int main(int argc, char** argv) {
                                             cycle_size = detect_threshold;
                                             if (match_counter == detect_threshold) {
                                                 is_full = true;
+                                                std::cout << detect_threshold << " archive" << ((detect_threshold > 1) ? "s" : "") << " matched, compression cycling detected. More passes should not be necessary." << std::endl;
                                                 goto passes_checked;
                                             } else {
                                                 //std::cout << "Match, referencing previous copy." << std::endl;
@@ -478,13 +479,13 @@ sample_added:           ; //nop
                 p++;
             }
 passes_checked:
+            std::cout << "Cleaning \"" << arg_string[2] << "\"." << std::endl;
+            remove(arg_string[2].c_str());
             if (minimal_zip_passes != 0) {
                 std::cout << "Minimum archive size: " << minimal_zip_length << " " << bypl(minimal_zip_length) << " (" << (minimal_zip_passes) << papl(minimal_zip_passes) << ")." << std::endl;
             } else {
                 std::cout << "No archives were created." << std::endl;
             }
-            std::cout << "Removing \"" << arg_string[2] << "\"." << std::endl;
-            remove(arg_string[2].c_str());
 
             if (zipSingle.size() == 0) {
                 arcname_out = zipOutputDir + dir_list[i];
