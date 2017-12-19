@@ -100,7 +100,7 @@ int main(int argc, char** argv) {
                     "c:\\Program Files\\7-Zip\\7z.exe", "string", cmd);
 
     TCLAP::ValueArg<int> cmdPasses("p", "passes",
-                    "Passes limit, set to 0 for automatic estimation. [100]", false,
+                    "Passes limit, set to 0 for unlimited search. [100]", false,
                     100, "integer", cmd);
 
     TCLAP::ValueArg<int> cmdStart("b", "begin",
@@ -160,13 +160,8 @@ int main(int argc, char** argv) {
     old_detection      = cmdOld.getValue();
     detect_threshold   = std::max((unsigned) 1, std::min((unsigned) cmdDetect.getValue(), ((passes != 0) ? (unsigned) passes : (unsigned) -1)));
     if (passes < 1) {
-        if (!old_detection) {
-            auto_passes = true;
-            passes = std::max(576, (int) detect_threshold) * 3 + begin - 1; //1728 = 24*24*3
-        } else {
-            passes = 1727 + begin;
-            std::cerr << "Old detection does not find cycles. Setting passes to " << passes << "." << std::endl;
-        }
+        auto_passes = true;
+        passes = std::max(576, (int) detect_threshold) * 3 + begin - 1; // 24*24*3
     }
     //std::cout << "passes: " << passes << std::endl;
     //std::cout << "detect_threshold: " << detect_threshold << std::endl;
@@ -415,26 +410,7 @@ wrong_cycle:                                ; //nop
                                                             }
                                                         }
                                                     }
-                                                    //std::cout << "Found multiple: " << multiple << std::endl;
-                                                    if (multiple > max_cycle) {
-                                                        max_cycle = multiple;
-                                                        //std::cout << "Found max_cycle: " << max_cycle << ", start: " << max_cycle_start << ", passes: " << passes << std::endl;
-                                                        if (auto_passes and ((max_cycle_start + max_cycle * 3) > passes)) {
-                                                            unsigned prev_passes = passes;
-                                                            passes = max_cycle_start + max_cycle * 7;
-                                                            zip_indices.resize(passes);
-                                                            cycleN_count.resize(passes);
-                                                            cycleN_match.resize(passes);
-                                                            cycleN_sizes.resize(passes);
-                                                            for (unsigned l = prev_passes; l < passes; l++) {
-                                                                zip_indices[l] = -1;
-                                                                //cycleN_count[l] = 0;
-                                                                //cycleN_match[l] = 0;
-                                                                //cycleN_sizes[l] = 0;
-                                                            }
-                                                            //std::cout << "New passes maximum: " << passes << std::endl;
-                                                        }
-                                                    }
+                                                    if (multiple > max_cycle) max_cycle = multiple;
                                                     break;
                                                 }
                                                 if (cs == c1) break; // minimal cycle size is already present
@@ -476,6 +452,21 @@ sample_added:           ; //nop
                     std::cerr << "\nCan not open archive \"" << arg_string[2] << "\"." << std::endl;
                 if (max_cycle > 0) std::cout << "Estimated cycle: " << max_cycle << ", total passes: " << (max_cycle_start + max_cycle * 2) << "." << std::endl;
                 if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold << std::endl;
+                if (auto_passes and ((max_cycle_start + p * 2 + max_cycle * 3) > passes)) {
+                    unsigned prev_passes = passes;
+                    passes = max_cycle_start + passes * 3 + max_cycle * 7;
+                    zip_indices.resize(passes);
+                    cycleN_count.resize(passes);
+                    cycleN_match.resize(passes);
+                    cycleN_sizes.resize(passes);
+                    for (unsigned l = prev_passes; l < passes; l++) {
+                        zip_indices[l] = -1;
+                        //cycleN_count[l] = 0;
+                        //cycleN_match[l] = 0;
+                        //cycleN_sizes[l] = 0;
+                    }
+                    //std::cout << "New passes maximum: " << passes << std::endl;
+                }
                 p++;
             }
 passes_checked:
