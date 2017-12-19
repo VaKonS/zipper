@@ -450,7 +450,8 @@ sample_added:           ; //nop
                     std::cerr << "\nCan not open archive \"" << arg_string[2] << "\"." << std::endl;
                 if (max_cycle > 0) std::cout << "Estimated cycle: " << max_cycle << ", total passes: " << (max_cycle_start + max_cycle * 2) << "." << std::endl;
                 if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold << std::endl;
-                if (auto_passes and ((p + 2) > passes)) {
+                p++;
+                if (auto_passes and (p >= passes)) {
                     unsigned prev_passes = passes;
                     passes = (p + passes + max_cycle_start + max_cycle) * 3;
                     //std::cout << "New passes maximum: " << passes << std::endl;
@@ -467,7 +468,6 @@ sample_added:           ; //nop
                         //}
                     }
                 }
-                p++;
             }
 passes_checked:
             std::cout << "Cleaning \"" << arg_string[2] << "\"." << std::endl;
