@@ -420,10 +420,8 @@ wrong_cycle:                                ; //nop
                                         } else
                                             std::cout << ", ";
                                         std::cout << cycleN_count[c] << "/" << c1;
-                                        if (cycleN_count[c] == 1) { // cycle is re/started
-                                            if (max_cycle == c1) { // cycle is estimated
-                                                max_cycle_start = p - c1;
-                                            }
+                                        if (max_cycle == c1) { // cycle is estimated
+                                            max_cycle_start = p - c - cycleN_count[c];
                                         }
                                     } else
                                         cycleN_count[c] = 0;
@@ -452,20 +450,22 @@ sample_added:           ; //nop
                     std::cerr << "\nCan not open archive \"" << arg_string[2] << "\"." << std::endl;
                 if (max_cycle > 0) std::cout << "Estimated cycle: " << max_cycle << ", total passes: " << (max_cycle_start + max_cycle * 2) << "." << std::endl;
                 if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold << std::endl;
-                if (auto_passes and ((max_cycle_start + p * 2 + max_cycle * 3) > passes)) {
+                if (auto_passes and ((p + 2) > passes)) {
                     unsigned prev_passes = passes;
-                    passes = max_cycle_start + passes * 3 + max_cycle * 7;
-                    zip_indices.resize(passes);
-                    cycleN_count.resize(passes);
-                    cycleN_match.resize(passes);
-                    cycleN_sizes.resize(passes);
-                    for (unsigned l = prev_passes; l < passes; l++) {
-                        zip_indices[l] = -1;
-                        //cycleN_count[l] = 0;
-                        //cycleN_match[l] = 0;
-                        //cycleN_sizes[l] = 0;
-                    }
+                    passes = (p + passes + max_cycle_start + max_cycle) * 3;
                     //std::cout << "New passes maximum: " << passes << std::endl;
+                    zip_indices.resize(passes);
+                    for (unsigned l = prev_passes; l < passes; l++) zip_indices[l] = -1;
+                    if (!old_detection) {
+                        cycleN_count.resize(passes);
+                        cycleN_match.resize(passes);
+                        cycleN_sizes.resize(passes);
+                        //for (unsigned l = prev_passes; l < passes; l++) {
+                        //    cycleN_count[l] = 0;
+                        //    cycleN_match[l] = 0;
+                        //    cycleN_sizes[l] = 0;
+                        //}
+                    }
                 }
                 p++;
             }
