@@ -488,6 +488,7 @@ passes_checked:
                 arcname_out = zipOutputDir + dir_list[i];
                 if (minimal_zip_passes != 0) {
                     int d = std::floor(std::log10(passes)) + 1;
+                    d = auto_passes ? std::max(8, d) : d;
                     std::string f = "%0" + std::to_string(d) + "u";
                     if (show_passes) {
                         snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), minimal_zip_passes);
