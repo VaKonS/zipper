@@ -100,8 +100,8 @@ int main(int argc, char** argv) {
                     "c:\\Program Files\\7-Zip\\7z.exe", "string", cmd);
 
     TCLAP::ValueArg<int> cmdPasses("p", "passes",
-                    "Passes limit, set to 100 for relatively fast, but incomplete check. [0 = auto]", false,
-                    0, "integer", cmd);
+                    "Passes limit, set to 0 for automatic estimation. [100]", false,
+                    100, "integer", cmd);
 
     TCLAP::ValueArg<int> cmdStart("b", "begin",
                     "Start passes value. Useful to continue interrupted test. [1]", false,
@@ -276,6 +276,7 @@ int main(int argc, char** argv) {
             unsigned minimal_zip_length = (unsigned) -1;
             unsigned minimal_zip_passes = 0;
             unsigned match_counter = 0;
+            bool matched_once = false;
             unsigned pass_counter = 0;
             unsigned cycle_size = 0;
             unsigned max_cycle = 0;
@@ -346,7 +347,7 @@ int main(int argc, char** argv) {
                                         add_index = c;
                                         if (old_detection) {
                                             match_counter++;
-                                            std::cout << "Matched archives: " << match_counter << "/" << detect_threshold << std::endl;
+                                            matched_once = true;
                                             cycle_size = detect_threshold;
                                             if (match_counter == detect_threshold) {
                                                 is_full = true;
@@ -465,11 +466,13 @@ wrong_cycle:                                ; //nop
                             minimal_zip_length = zip_length;
                             minimal_zip_passes = pass_counter; // p + 1
                         }
-sample_added:           if (max_cycle > 0) std::cout << "Estimated cycle: " << max_cycle << ", total passes: " << (max_cycle_start + max_cycle * 2) << "." << std::endl;
+sample_added:           ; //nop
                     } else
                         file_check.close();
                 } else
                     std::cerr << "\nCan not open archive \"" << arg_string[2] << "\"." << std::endl;
+                if (max_cycle > 0) std::cout << "Estimated cycle: " << max_cycle << ", total passes: " << (max_cycle_start + max_cycle * 2) << "." << std::endl;
+                if (matched_once) std::cout << "Matched archives: " << match_counter << "/" << detect_threshold << std::endl;
                 p++;
             }
 passes_checked:
