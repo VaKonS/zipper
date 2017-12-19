@@ -353,7 +353,7 @@ int main(int argc, char** argv) {
                                             cycle_size = detect_threshold;
                                             if (match_counter == detect_threshold) {
                                                 is_full = true;
-                                                std::cout << detect_threshold << " archive" << ((detect_threshold > 1) ? "s" : "") << " matched, compression cycling detected. More passes should not be necessary." << std::endl;
+                                                std::cout << "Matched archives: " << match_counter << "/" << detect_threshold << ". Search complete." << std::endl;
                                                 goto passes_checked;
                                             } else {
                                                 //std::cout << "Match, referencing previous copy." << std::endl;
