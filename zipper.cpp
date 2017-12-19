@@ -419,9 +419,9 @@ wrong_cycle:                                ; //nop
                                                     if (multiple > max_cycle) {
                                                         max_cycle = multiple;
                                                         //std::cout << "Found max_cycle: " << max_cycle << ", start: " << max_cycle_start << ", passes: " << passes << std::endl;
-                                                        if (auto_passes and ((max_cycle * 3) > passes)) {
+                                                        if (auto_passes and ((max_cycle_start + max_cycle * 3) > passes)) {
                                                             unsigned prev_passes = passes;
-                                                            passes = max_cycle * 7;
+                                                            passes = max_cycle_start + max_cycle * 7;
                                                             zip_indices.resize(passes);
                                                             cycleN_count.resize(passes);
                                                             cycleN_match.resize(passes);
