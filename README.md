@@ -44,16 +44,16 @@ Disable adding ".best#.of#" to names of separate archives.<br>
 Omit ".cycle size/-" in names of separate archives (can help to find wrong results).<br>
 <br>
 **\-p** #<br>
-Limit number of search passes. Large values can be *very* slow.<br>
+Limit number of search passes. By default limited to 100. Set to 0 to search until memory limit (depending on compressing files, can be *very* slow).<br>
 <br>
 **\-b** #<br>
 Begin from # passes. For example, when you need to continue a search.<br>
 <br>
 **\-d** #<br>
-Stop after # identical archives (detect compression cycling). Values higher than 12 are probably useless.<br>
+Stop after # identical archives. Values higher than 12 are probably useless.<br>
 <br>
 **\-a** 1<br>
-Use old cycling detection. It's faster, but *maybe* skips results. So far both methods were finding same values, but it needs more testing.<br>
+Use old detection of end of search. It's faster, but *maybe* skips results. So far both methods were finding same values, but it needs more testing.<br>
 <br>
 **\-m** off/#<br>
 Turn 7-Zip multithreading option off or limit number of threads.<br>
@@ -104,7 +104,7 @@ Redefine the archiving command. Template sequence `%c` is substituted with archi
 Не добавлять к именам раздельных архивов ".cycle#" (найденный размер цикла, помогает отследить возможно неправильные результаты).<br>
 <br>
 **\-p** #<br>
-Ограничить количество попыток (100 по умолчанию).<br>
+Ограничить количество попыток (ограничено 100 по умолчанию). Установите в ноль для неограниченного поиска, пока хватит памяти (в зависимости от сжимаемых данных, поиск может быть очень долгим).<br>
 <br>
 **\-b** #<br>
 Начать с # проходов. Например, если нужно продолжить поиск.<br>
@@ -113,7 +113,7 @@ Redefine the archiving command. Template sequence `%c` is substituted with archi
 Останавливаться при # повторах сжатия. После тестов похоже, что значения выше 12 уже ничего не меняют.<br>
 <br>
 **\-a** 1<br>
-Определять зацикливание старым способом. Он быстрее, но не исключено, что пропускает результаты из-за меньшего числа попыток. Пока что у меня оба алгоритма дают одинаковые значения, но надо проверять.<br>
+Определять окончание поиска старым способом. Он быстрее, но не исключено, что пропускает результаты из-за меньшего числа попыток. Пока что у меня оба алгоритма дают одинаковые значения, но надо проверять.<br>
 <br>
 **\-m** off/#<br>
 Задать количество потоков для архиватора 7-Zip.<br>
