@@ -53,7 +53,7 @@ Begin from # passes. For example, when you need to continue a search.<br>
 Stop after # identical archives. Values higher than 12 are probably useless.<br>
 <br>
 **\-a** 1<br>
-Use old detection of end of search. It's faster, but *maybe* skips results. So far both methods were finding same values, but it needs more testing.<br>
+Detect end of search by old method. It's faster, but *maybe* skips results. So far both methods were finding same values, but it needs more testing.<br>
 <br>
 **\-m** off/#<br>
 Turn 7-Zip multithreading option off or limit number of threads.<br>
@@ -104,7 +104,7 @@ Redefine the archiving command. Template sequence `%c` is substituted with archi
 Не добавлять к именам раздельных архивов ".cycle#" (найденный размер цикла, помогает отследить возможно неправильные результаты).<br>
 <br>
 **\-p** #<br>
-Ограничить количество попыток (ограничено 100 по умолчанию). Установите в ноль для неограниченного поиска, пока хватит памяти (в зависимости от сжимаемых данных, поиск может быть очень долгим).<br>
+Ограничить количество попыток (100 по умолчанию). Установите в ноль для неограниченного поиска, пока хватит памяти (в зависимости от сжимаемых данных, поиск может быть очень долгим).<br>
 <br>
 **\-b** #<br>
 Начать с # проходов. Например, если нужно продолжить поиск.<br>
