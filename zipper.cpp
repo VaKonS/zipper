@@ -276,6 +276,9 @@ int main(int argc, char** argv) {
             unsigned cycle_size = 0;
             unsigned max_cycle = 0;
             unsigned max_cycle_start = 0;
+            unsigned last_cycle_size = 0;
+            unsigned last_cycle_start = 0;
+            unsigned min_cycle = minimal_zip_length; // max
             if (!old_detection) {
                 cycleN_count.assign(passes, 0);
                 cycleN_sizes.assign(passes, 0);
@@ -410,7 +413,10 @@ wrong_cycle:                                ; //nop
                                                             }
                                                         }
                                                     }
-                                                    if (multiple > max_cycle) max_cycle = multiple;
+                                                    if (multiple > max_cycle) {
+                                                        max_cycle = multiple;
+                                                        max_cycle_start = last_cycle_start; // for prediction use last minimal cycle start until it will be updated by match, it seems to be correct
+                                                    }
                                                     break;
                                                 }
                                                 if (cs == c1) break; // minimal cycle size is already present
@@ -422,6 +428,16 @@ wrong_cycle:                                ; //nop
                                         std::cout << cycleN_count[c] << "/" << c1;
                                         if (max_cycle == c1) { // cycle is estimated
                                             max_cycle_start = p - c - cycleN_count[c];
+                                            if (cycleN_count[c] == 1) { // cycle is started
+                                                if (c1 < min_cycle) min_cycle = c1; // minimal cycle size
+                                                if (c1 > last_cycle_size) { // started 1st time
+                                                    last_cycle_size = c1;
+                                                    last_cycle_start = (p + 1) % min_cycle; last_cycle_start = ((p + 1) / min_cycle + (((last_cycle_start * 2) >= min_cycle) ? 1 : 0)) * min_cycle - c1 - 1; //round()
+                                                    //std::cout << std::endl << last_cycle_start << ", ";
+                                                    //last_cycle_start = std::round(double(p + 1) / min_cycle) * min_cycle - c1 - 1; //max_cycle_start; // minimal cycle start
+                                                    //std::cout << last_cycle_start << ", " << max_cycle_start << std::endl;
+                                                }
+                                            }
                                         }
                                     } else
                                         cycleN_count[c] = 0;
