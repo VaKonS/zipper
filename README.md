@@ -21,9 +21,9 @@ To compile, [TCLAP](https://sourceforge.net/projects/tclap/) package is needed.
 Will compress all files from current directory to "output_directory\file.extension.best#.of#.cycle#.zip".<br>
 *Try to use "/" or "\\\\" instead of "\\" in paths in case of errors.*<br>
 <br>
-### Current limitation:
-Do not compress subfolders to single archive.<br>
-When adding files, not folders, 7-Zip will strip file paths, and **all files will be in root folder of archive.**
+### Current limitations:
+- When compressing to single archive, all files from subfolders will be in root folder of archive.
+- Parameters (i. e. directories/archive name) can be only in local codepage. But found filenames can have any codepage. The will not be shown correctly in console, but should be processed fine.
 
 ---
 ## Tuning:
@@ -81,9 +81,9 @@ Redefine the archiving command. Template sequence `%c` is substituted with archi
 Сожмёт все файлы из текущего каталога в "папку для архивов".<br>
 *При ошибках попробуйте заменить в путях "\\" на "/" или "\\\\".*<br>
 <br>
-### Ограничение на данный момент:
-Не сжимайте папки в один архив.<br>
-7-Zip убирает пути, если в архив добавляется файл, а не папка. **Все файлы будут в корне архива.**
+### Ограничения на данный момент:
+- При сжатии в один архив, все файлы из подкаталогов будут в корне архива.
+- Параметры (имена каталогов/архива) могут задаваться только в текущей кодовой странице. Файлы, которые программа найдёт сама, могут быть с именами в любой кодовой странице. Они не будут верно отображаться, но обрабатываться должны правильно.
 
 ---
 Дополнительные параметры:<br>
