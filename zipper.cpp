@@ -15,59 +15,170 @@
 
 // ----------------------------------------------------------
 // initialized data
-const std::string zipExt = ".zip";
+const unsigned output_locale = 866; //65001; //1251; // if anything but CP_UTF8, OEM codepage will be used
+const std::wstring zipExt = L".zip";
 bool auto_passes = false;
+HANDLE file_check = INVALID_HANDLE_VALUE;
+HANDLE outfile = INVALID_HANDLE_VALUE;
 
 
 // uninitialized data
 bool show_passes, show_full, is_full, old_detection;
 unsigned passes, begin, detect_threshold;
 size_t mem_limit, mem_use;
-std::string zipTempDir, zipInputDir, zipOutputDir, arcname_out, mmt, redefine, zipSingle, zip_cmd;
-std::string arg_string[4]; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
-std::vector<std::string> dir_list;
+std::wstring zipTempDir, zipInputDir, zipOutputDir, arcname_out, mmt, redefine, zipSingle, zip_cmd;
+std::wstring arg_string[4]; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
+char * locale_name;
+std::vector<std::wstring> dir_list;
 std::vector<bool> dir_subdirs;
-DIR * dir_handle;
-dirent * dir_entry;
-std::ifstream file_check;
-std::ofstream outfile;
+/*
+DIR* __cdecl __MINGW_NOTHROW opendir (const char*);
+struct dirent* __cdecl __MINGW_NOTHROW readdir (DIR*);
+int __cdecl __MINGW_NOTHROW closedir (DIR*);
+void __cdecl __MINGW_NOTHROW rewinddir (DIR*);
+long __cdecl __MINGW_NOTHROW telldir (DIR*);
+void __cdecl __MINGW_NOTHROW seekdir (DIR*, long);
+
+_WDIR* __cdecl __MINGW_NOTHROW _wopendir (const wchar_t*);
+struct _wdirent* __cdecl __MINGW_NOTHROW _wreaddir (_WDIR*);
+int __cdecl __MINGW_NOTHROW _wclosedir (_WDIR*);
+void __cdecl __MINGW_NOTHROW _wrewinddir (_WDIR*);
+long __cdecl __MINGW_NOTHROW _wtelldir (_WDIR*);
+void __cdecl __MINGW_NOTHROW _wseekdir (_WDIR*, long);
+//*/
+_WDIR * dir_handle;
+_wdirent * dir_entry;
 std::vector<std::vector<char>> zip_storage;
 std::vector<int> zip_indices; // zip_storage indices
 std::vector<char> zip_pass1;
 std::vector<unsigned> cycleN_count;
 std::vector<bool> cycleN_match;
 std::vector<unsigned> cycleN_sizes;
-char path_buf[2048];
+wchar_t wpath_buf[32768];
+const size_t wpath_buf_length = sizeof(wpath_buf) / sizeof(wchar_t);
+wchar_t wchar_buf[32768];
+char    char_buf[32768 * 4]; //since CreateProcessW can modify command line, some characters can be appended?
+
 MEMORYSTATUS mem_stat;
 std::vector<int> params; // arg_string[] indices, -1 for pass number
 std::vector<size_t> positions;
 
+STARTUPINFO si = {
+    sizeof(STARTUPINFO),  //DWORD   cb
+    NULL,                 //LPTSTR lpReserved
+    NULL,                 //LPTSTR lpDesktop
+    NULL,                 //LPTSTR lpTitle
+    0,                    //DWORD dwX
+    0,                    //DWORD dwY
+    0,                    //DWORD dwXSize
+    0,                    //DWORD dwYSize
+    0,                    //DWORD dwXCountChars
+    0,                    //DWORD dwYCountChars
+    0,                    //DWORD dwFillAttribute
+    0,                    //STARTF_USESTDHANDLES, //DWORD dwFlags
+    0,                    //WORD wShowWindow
+    0,                    //WORD cbReserved2
+    NULL,                 //LPBYTE lpReserved2
+    INVALID_HANDLE_VALUE, //HANDLE hStdInput
+    INVALID_HANDLE_VALUE, //HANDLE hStdOutput
+    INVALID_HANDLE_VALUE  //HANDLE hStdError
+};
+
+PROCESS_INFORMATION pi = {
+    INVALID_HANDLE_VALUE, //HANDLE hProcess
+    INVALID_HANDLE_VALUE, //HANDLE hThread
+    0,                    //DWORD dwProcessId
+    0                     //DWORD dwThreadId
+};
+
 
 // ----------------------------------------------------------
-size_t path_length(std::string i) { // drive's "current directory" (i. e. "a:" without slash) will not be found
-    size_t s = i.find_last_of('/');
-    size_t b = i.find_last_of('\\');
-    if (s == std::string::npos) s = b;
-    if (b != std::string::npos) if (b > s) s = b;
-    if (s != std::string::npos) s++; else s = 0;
+void Close_File(HANDLE * fh) {
+    if (*fh != INVALID_HANDLE_VALUE) {
+        CloseHandle(*fh);
+        *fh = INVALID_HANDLE_VALUE;
+    }
+}
+
+int Close_All_Return(int exit_code) {
+    Close_File(&file_check);
+    Close_File(&outfile);
+    return exit_code;
+}
+
+/*
+std::wstring string2wstring(std::string i) {
+    int l = i.size() + 1; //terminating 0
+    const int b = sizeof(wchar_buf) / sizeof(wchar_t);
+    if (MultiByteToWideChar(((output_locale == CP_UTF8)?CP_UTF8:CP_OEMCP), 0, i.c_str(), l, NULL, 0) > b) { //(UINT CodePage, DWORD dwFlags, LPCSTR lpMultiByteStr, int cbMultiByte, LPWSTR lpWideCharStr, int cchWideChar)
+        std::cerr << "string2wstring: wide characters buffer is too small." << std::endl;
+        std::exit(Close_All_Return(EXIT_FAILURE));
+    }
+    MultiByteToWideChar(((output_locale == CP_UTF8)?CP_UTF8:CP_OEMCP), 0, i.c_str(), l, (LPWSTR) &wchar_buf, b);
+    return std::wstring(wchar_buf);
+}
+//*/
+
+std::string wstring2string(std::wstring i) {
+    int l = i.size() + 1; //terminating 0
+    const int b = sizeof(char_buf);
+    if (WideCharToMultiByte(((output_locale == CP_UTF8)?CP_UTF8:CP_OEMCP), 0, i.c_str(), l, NULL, 0, NULL, NULL) > b) { //(UINT CodePage, DWORD dwFlags, LPWSTR lpWideCharStr, int cchWideChar, LPCSTR lpMultiByteStr, int cbMultiByte, LPCSTR lpDefaultChar, LPBOOL lpUsedDefaultChar)
+        std::cerr << "wstring2string: characters buffer is too small." << std::endl;
+        std::exit(Close_All_Return(EXIT_FAILURE));
+    }
+    WideCharToMultiByte(((output_locale == CP_UTF8)?CP_UTF8:CP_OEMCP), 0, i.c_str(), l, (LPSTR) &char_buf, b, NULL, NULL);
+    return std::string(char_buf);
+}
+
+std::wstring oemstring2wstring(std::string i) {
+    int l = i.size() + 1; //terminating 0
+    const int b = sizeof(wchar_buf) / sizeof(wchar_t);
+
+    if (MultiByteToWideChar(CP_OEMCP, 0, i.c_str(), l, NULL, 0) > b) { //(UINT CodePage, DWORD dwFlags, LPCSTR lpMultiByteStr, int cbMultiByte, LPWSTR lpWideCharStr, int cchWideChar)
+        std::cerr << "oemstring2wstring: wide characters buffer is too small." << std::endl;
+        std::exit(Close_All_Return(EXIT_FAILURE));
+    }
+    MultiByteToWideChar(CP_OEMCP, 0, i.c_str(), l, (LPWSTR) &wchar_buf, b);
+    return std::wstring(wchar_buf);
+}
+
+std::string wstring2oemstring(std::wstring i) {
+    int l = i.size() + 1; //terminating 0
+    const int b = sizeof(char_buf);
+    if (WideCharToMultiByte(CP_OEMCP, 0, i.c_str(), l, NULL, 0, NULL, NULL) > b) { //(UINT CodePage, DWORD dwFlags, LPWSTR lpWideCharStr, int cchWideChar, LPCSTR lpMultiByteStr, int cbMultiByte, LPCSTR lpDefaultChar, LPBOOL lpUsedDefaultChar)
+        std::cerr << "wstring2oemstring: characters buffer is too small." << std::endl;
+        std::exit(Close_All_Return(EXIT_FAILURE));
+    }
+    WideCharToMultiByte(CP_OEMCP, 0, i.c_str(), l, (LPSTR) &char_buf, b, NULL, NULL);
+    return std::string(char_buf);
+}
+
+size_t wPath_length(std::wstring i) { // drive's "current directory" (i. e. "a:" without slash) will not be found
+    size_t s = i.find_last_of(L'/');
+    size_t b = i.find_last_of(L'\\');
+    if (s == std::wstring::npos) s = b;
+    if (b != std::wstring::npos) if (b > s) s = b;
+    if (s != std::wstring::npos) s++; else s = 0;
     return s;
 }
 
-std::string ShortPath(std::string pn) {
-    std::string p = pn.substr(0, path_length(pn));
-    if (GetShortPathNameA(p.c_str(), (LPSTR) &path_buf, sizeof(path_buf)) > sizeof(path_buf)) { //(lpszLongPath,lpszShortPath,cchBuffer)
+/*
+std::wstring wShortPath(std::wstring pn) {
+    std::wstring p = pn.substr(0, wPath_length(pn));
+    if (GetShortPathNameW(p.c_str(), (LPWSTR) &wpath_buf, wpath_buf_length) > wpath_buf_length) { //(lpszLongPath,lpszShortPath,cchBuffer)
         std::cerr << "Path buffer is too small." << std::endl;
-        std::exit(-1);
+        std::exit(Close_All_Return(EXIT_FAILURE));
     }
-    return std::string(path_buf);
+    return std::wstring(wpath_buf);
 }
+//*/
 
-std::string trailSlash(std::string s) {
+std::wstring wTrailSlash(std::wstring s) {
     unsigned c = s.size();
-    if (c == 0) return "";
+    if (c == 0) return L"";
     c = s[c - 1];
-    if ((c == '\\') or (c == '/')) return s;
-    return s + "\\";
+    if ((c == L'\\') or (c == L'/')) return s;
+    return s + L"\\";
 }
 
 std::string papl(unsigned n) {return (n == 1) ? " pass" : " passes";}
@@ -75,9 +186,28 @@ std::string bypl(unsigned n) {return (n == 1) ? "byte" : "bytes";}
 
 int main(int argc, char** argv) {
 
+    if (output_locale == CP_UTF8) {
+        SetConsoleOutputCP(CP_UTF8);
+        //SetConsoleCP(CP_UTF8);
+        setlocale(LC_ALL, ".65001");
+    } else {
+        //SetConsoleOutputCP(GetOEMCP());
+        //SetConsoleCP(GetOEMCP());
+        setlocale(LC_ALL, ("." + std::to_string(GetOEMCP())).c_str());
+    }
+    //system("graftabl");
+    locale_name = setlocale(LC_ALL, NULL);
+    std::cout << "Locale: " << ((locale_name == NULL)?"error getting locale name.":std::string(locale_name)) << std::endl;
+
+    if (GetEnvironmentVariableW(L"ProgramFiles", (LPWSTR)&wpath_buf, wpath_buf_length) >= wpath_buf_length) {
+        std::cerr << "GetEnvironmentVariable: wide characters buffer is too small." << std::endl;
+        return Close_All_Return(EXIT_FAILURE);
+    };
+    arg_string[0] = std::wstring(wpath_buf) + L"\\7-Zip\\7z.exe";
+
     // definition of command line arguments   abcdefghijklmnopqrstuvwxyz
     //                                        abcd.f..i..lmnop.rst......
-    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.42");
+    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.5");
 
     TCLAP::ValueArg<std::string> cmdInputDir("i", "input-mask",
                     "Directory with files to compress.\nRun Zipper from this directory to avoid paths inside archives. [.]", false,
@@ -96,8 +226,8 @@ int main(int argc, char** argv) {
                     "", "string", cmd);
 
     TCLAP::ValueArg<std::string> cmd7Zip("c", "compressor",
-                    "Pathname to 7-Zip archiver. [c:\\Program Files\\7-Zip\\7z.exe]", false,
-                    "c:\\Program Files\\7-Zip\\7z.exe", "string", cmd);
+                    "Pathname to 7-Zip archiver. [" + wstring2oemstring(arg_string[0]) + "]", false,
+                    wstring2oemstring(arg_string[0]), "string", cmd);
 
     TCLAP::ValueArg<int> cmdPasses("p", "passes",
                     "Passes limit, set to 0 for unlimited search. [100]", false,
@@ -141,22 +271,22 @@ int main(int argc, char** argv) {
     } catch (std::exception &e) {
         std::cerr << e.what() << std::endl;
         std::cerr << "Error : cmd.parse() threw exception" << std::endl;
-        std::exit(-1);
+        return Close_All_Return(EXIT_FAILURE);
     }
 
     // command line accepted, begin console processing
-    arg_string[0]      = cmd7Zip.getValue(); // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
-    zipTempDir         = cmdTempDir.getValue();
-    zipInputDir        = cmdInputDir.getValue();
-    zipOutputDir       = cmdOutputDir.getValue();
+    arg_string[0]      = oemstring2wstring(cmd7Zip.getValue()); // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
+    zipTempDir         = oemstring2wstring(cmdTempDir.getValue());
+    zipInputDir        = oemstring2wstring(cmdInputDir.getValue());
+    zipOutputDir       = oemstring2wstring(cmdOutputDir.getValue());
     passes             = std::max(0, cmdPasses.getValue());
     begin              = std::max(cmdStart.getValue(), 1);
     mem_limit          = cmdMemLimit.getValue() << 20;
-    mmt                = cmdMMT.getValue();
+    mmt                = oemstring2wstring(cmdMMT.getValue());
     show_passes        = cmdShowPasses.getValue();
     show_full          = cmdShowFull.getValue();
-    redefine           = cmdRedefine.getValue();
-    zipSingle          = cmdSingle.getValue();
+    redefine           = oemstring2wstring(cmdRedefine.getValue());
+    zipSingle          = oemstring2wstring(cmdSingle.getValue());
     old_detection      = cmdOld.getValue();
     detect_threshold   = std::max((unsigned) 1, std::min((unsigned) cmdDetect.getValue(), ((passes != 0) ? (unsigned) passes : (unsigned) -1)));
     if (passes < 1) {
@@ -168,13 +298,13 @@ int main(int argc, char** argv) {
 
     if (begin > passes) {
         std::cerr << "\nStarting number of passes is greater than total number (" << begin << " > " << passes << "). Stop." << std::endl;
-        std::exit(-1);
+        return Close_All_Return(EXIT_FAILURE);
     }
 
-    arg_string[0] = ShortPath(arg_string[0]) + "7z.exe"; //archiver's short pathname
-    std::cout << "Archiver: \"" << arg_string[0] << "\"." << std::endl;
+    //arg_string[0] = wShortPath(arg_string[0]) + L"7z.exe"; //archiver's short pathname
+    std::cout << "Archiver: \"" << wstring2oemstring(arg_string[0]) << "\"." << std::endl;
 
-    arg_string[3] = "%"; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
+    arg_string[3] = L"%"; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
 
     // parsing command template
     params.clear();
@@ -182,11 +312,11 @@ int main(int argc, char** argv) {
     if (redefine.size() != 0) {
         size_t l = 0;
         while (l < redefine.npos) {
-            size_t a = redefine.find("%i", l);
-            size_t b = redefine.find("%o", l);
-            size_t c = redefine.find("%p", l);
-            size_t d = redefine.find("%c", l);
-            size_t e = redefine.find("%%", l);
+            size_t a = redefine.find(L"%i", l);
+            size_t b = redefine.find(L"%o", l);
+            size_t c = redefine.find(L"%p", l);
+            size_t d = redefine.find(L"%c", l);
+            size_t e = redefine.find(L"%%", l);
             l = std::min(std::min(std::min(std::min(a, b), c), d), e);
             if (l < redefine.npos) {
                 if      (l == a) params.push_back(1);  // input
@@ -200,37 +330,36 @@ int main(int argc, char** argv) {
         }
     }
 
-    zipInputDir = trailSlash(zipInputDir);
-    zipOutputDir = trailSlash(zipOutputDir);
-    if (zipTempDir.size() == 0) zipTempDir = zipOutputDir; else zipTempDir = trailSlash(zipTempDir);
+    zipInputDir = wTrailSlash(zipInputDir);
+    zipOutputDir = wTrailSlash(zipOutputDir);
+    if (zipTempDir.size() == 0) zipTempDir = zipOutputDir; else zipTempDir = wTrailSlash(zipTempDir);
 
     // making recursive input directory listing
-    dir_list.push_back("");
+    dir_list.push_back(L"");
     dir_subdirs.push_back(true);
     int subdir_index = 0;
     while (subdir_index != -1) {
-        std::string recursiveDir = trailSlash(zipInputDir + dir_list[subdir_index]);
-        dir_handle = opendir(recursiveDir.c_str());
+        std::wstring recursiveDir = wTrailSlash(zipInputDir + dir_list[subdir_index]);
+        dir_handle = _wopendir(recursiveDir.c_str());
         if (dir_handle != NULL) {
-            std::cout << "Opened directory \"" << recursiveDir << "\"." << std::endl;
-            while ((dir_entry = readdir(dir_handle)) != NULL) {
-                std::string n(dir_entry->d_name);
-                //TODO: Unicode?
-                int t = GetFileAttributesA((recursiveDir + n).c_str());
+            std::cout << "Opened directory \"" << wstring2string(recursiveDir) << "\"." << std::endl;
+            while ((dir_entry = _wreaddir(dir_handle)) != NULL) {
+                std::wstring n(dir_entry->d_name);
+                int t = GetFileAttributesW((recursiveDir + n).c_str());
                 if (t == -1) {
-                    closedir(dir_handle);
-                    std::cerr << "\nError reading attributes of \"" << (recursiveDir + n) << "\"." << std::endl;
-                    return EXIT_FAILURE;
+                    _wclosedir(dir_handle);
+                    std::cerr << "\nError reading attributes of \"" << wstring2string(recursiveDir + n) << "\"." << std::endl;
+                    return Close_All_Return(EXIT_FAILURE);
                 }
-                if (((t & FILE_ATTRIBUTE_DIRECTORY) == 0) || ((n != ".") && (n != ".."))) { // file or dir except ./..
-                    dir_list.push_back(trailSlash(dir_list[subdir_index]) + n);
+                if (((t & FILE_ATTRIBUTE_DIRECTORY) == 0) || ((n != L".") && (n != L".."))) { // file or dir except ./..
+                    dir_list.push_back(wTrailSlash(dir_list[subdir_index]) + n);
                     dir_subdirs.push_back((t & FILE_ATTRIBUTE_DIRECTORY) != 0);
                 }
             }
-            closedir(dir_handle);
+            _wclosedir(dir_handle);
         } else {
-            std::cerr << "\nError listing directory \"" << recursiveDir << "\"." << std::endl;
-            return EXIT_FAILURE;
+            std::cerr << "\nError listing directory \"" << wstring2string(recursiveDir) << "\"." << std::endl;
+            return Close_All_Return(EXIT_FAILURE);
         }
         dir_list.erase(dir_list.begin() + subdir_index);
         dir_subdirs.erase(dir_subdirs.begin() + subdir_index);
@@ -255,13 +384,13 @@ int main(int argc, char** argv) {
     // processing file list
     for (unsigned i = 0; i < dir_list.size(); i++) {
         arg_string[1] = zipInputDir + dir_list[i]; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
-        std::cout << "\n-------------------------------------\nFile: " << arg_string[1] << std::endl;
-        file_check = std::ifstream(arg_string[1], std::ifstream::binary);
-        if (file_check) {
-            file_check.close();
+        std::cout << "\n-------------------------------------\nFile: " << wstring2string(arg_string[1]) << std::endl;
+        file_check = CreateFileW(arg_string[1].c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL); //(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDistribution, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile)
+        if (file_check != INVALID_HANDLE_VALUE) {
+            Close_File(&file_check);
 
-            arg_string[2] = zipTempDir + dir_list[i].substr(path_length(dir_list[i])) + zipExt; // input name without path
-            std::cout << "Testing: " << arg_string[2] << std::endl;
+            arg_string[2] = zipTempDir + dir_list[i].substr(wPath_length(dir_list[i])) + zipExt; // input name without path
+            std::cout << "Testing: " << wstring2string(arg_string[2]) << std::endl;
 
             for (unsigned p = 0; p < zip_storage.size(); p++) zip_storage[p].clear(); // freeing memory
             zip_storage.clear();
@@ -292,8 +421,8 @@ int main(int argc, char** argv) {
                     std::cout << ", minimal packed size: " << minimal_zip_length << " " << bypl(minimal_zip_length) << " (" << (minimal_zip_passes) << papl(minimal_zip_passes) << ")." << std::endl;
                 }
                 if (redefine.size() == 0) {
-                    zip_cmd = arg_string[0] + " a -tzip -mx=9 -mmt=" + mmt + " -mtc=off -mfb=258 -mpass=" + std::to_string(p + 1)
-                              + " \"" + arg_string[2] + "\" \"" + arg_string[1] + "\"";
+                    zip_cmd = L"\"" + arg_string[0] + L"\" a -tzip -mx=9 -mmt=" + mmt + L" -mtc=off -mfb=258 -mpass=" + std::to_wstring(p + 1)
+                              + L" \"" + arg_string[2] + L"\" \"" + arg_string[1] + L"\"" + std::wstring(32768, L'\0');
                 } else {
                     zip_cmd = redefine;
                     for (int a = positions.size() - 1; a >= 0; a--) {
@@ -301,26 +430,30 @@ int main(int argc, char** argv) {
                         if (params[a] != -1) {
                             zip_cmd.insert(positions[a], arg_string[params[a]]);
                         } else {
-                            zip_cmd.insert(positions[a], std::to_string(p + 1));
+                            zip_cmd.insert(positions[a], std::to_wstring(p + 1));
                         }
                     }
+                    zip_cmd += std::wstring(32768, L'\0');
                 }
-                std::cout << zip_cmd.c_str() << std::endl;
-                system(zip_cmd.c_str());
-                file_check = std::ifstream(arg_string[2], std::ifstream::binary);
-                if (file_check) {
-                    file_check.seekg(0, file_check.end); // get length
-                    int zip_length = file_check.tellg();
-                    if (zip_length < 0) {
-                        std::cout << "\nCan not get length of archive." << std::endl;
+                std::cout << (char*)wstring2string(zip_cmd).c_str() << std::endl;
+                CreateProcessW(NULL, (LPWSTR)zip_cmd.c_str(), NULL, NULL, false, CREATE_UNICODE_ENVIRONMENT, NULL, NULL, &si, &pi); //(LPCWSTR lpApplicationName, LPWSTR lpCommandLine, LPSECURITY_ATTRIBUTES lpProcessAttributes, LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory, LPSTARTUPINFO lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation)
+                CloseHandle(pi.hThread);
+                WaitForSingleObject(pi.hProcess, INFINITE);
+                CloseHandle(pi.hProcess);
+
+                file_check = CreateFileW(arg_string[2].c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+                if (file_check != INVALID_HANDLE_VALUE) {
+                    unsigned zip_length = GetFileSize(file_check, NULL); //(HANDLE hFile, LPDWORD lpdwFileSizeHigh)
+                    if (zip_length == (unsigned) -1) {
+                        std::cerr << "\nCan not get length of archive." << std::endl;
                         zip_length = 0;
                     }
                     GlobalMemoryStatus(&mem_stat);
                     if (((mem_use + zip_length) > mem_limit) || (static_cast<size_t>(zip_length) > mem_stat.dwAvailPhys)) {
                         std::cout << "\nNo memory left to store archives.\nChoosing from what was saved so far..." << std::endl;
-                        file_check.close();
+                        Close_File(&file_check);
                         if (zipSingle.size() != 0) { // when packing to single archive, memory storage is not used and smaller size can still be packed
-                            if (zip_length > 0) if ((unsigned) zip_length < minimal_zip_length) {
+                            if (zip_length > 0) if (zip_length < minimal_zip_length) {
                                 pass_counter = p + 1;
                                 minimal_zip_length = zip_length;
                                 minimal_zip_passes = pass_counter;
@@ -328,16 +461,16 @@ int main(int argc, char** argv) {
                         }
                         goto passes_checked;
                     }
-                    unsigned m = std::max(std::min( (static_cast<int>(mem_limit) - static_cast<int>(mem_use) - zip_length), (static_cast<int>(mem_stat.dwAvailPhys) - zip_length) ), 0) >> 20;
+                    unsigned m = std::max((unsigned)0, std::min( (mem_limit - mem_use - zip_length), (static_cast<unsigned>(mem_stat.dwAvailPhys) - zip_length) ) ) >> 20;
                     std::cout << "Memory left: " << m << " mega" << bypl(m) << std::endl;
                     if (zip_length > 0) {
                         pass_counter = p + 1;
-                        file_check.seekg(0, file_check.beg);
                         zip_pass1.resize(zip_length);
-                        file_check.read(zip_pass1.data(), zip_length); // reading zip to memory
-                        file_check.close();
-                        std::cout << "Removing \"" << arg_string[2] << "\"." << std::endl;
-                        remove(arg_string[2].c_str());
+                        unsigned bytes_read;
+                        ReadFile(file_check, zip_pass1.data(), zip_length, (LPDWORD)&bytes_read, NULL); //(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead, LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped)
+                        Close_File(&file_check);
+                        std::cout << "Removing \"" << wstring2string(arg_string[2]) << "\"." << std::endl;
+                        DeleteFileW(arg_string[2].c_str());
                         int add_index = -1;
                         if (!old_detection) cycleN_match.assign(passes, false);
                         for (int c = p - 1; c >= 0; c--) {
@@ -461,9 +594,9 @@ wrong_cycle:                                ; //nop
                         }
 sample_added:           ; //nop
                     } else
-                        file_check.close();
+                        Close_File(&file_check);
                 } else
-                    std::cerr << "\nCan not open archive \"" << arg_string[2] << "\"." << std::endl;
+                    std::cerr << "\nCan not open archive \"" << wstring2string(arg_string[2]) << "\"." << std::endl;
                 if (max_cycle > 0) std::cout << "Estimated cycle: " << max_cycle << ", total passes: " << (max_cycle_start + max_cycle * 2) << "." << std::endl;
                 if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold << std::endl;
                 p++;
@@ -486,8 +619,8 @@ sample_added:           ; //nop
                 }
             }
 passes_checked:
-            std::cout << "Cleaning \"" << arg_string[2] << "\"." << std::endl;
-            remove(arg_string[2].c_str());
+            std::cout << "Cleaning \"" << wstring2string(arg_string[2]) << "\"." << std::endl;
+            DeleteFileW(arg_string[2].c_str());
             if (minimal_zip_passes != 0) {
                 std::cout << "Minimum archive size: " << minimal_zip_length << " " << bypl(minimal_zip_length) << " (" << (minimal_zip_passes) << papl(minimal_zip_passes) << ")." << std::endl;
             } else {
@@ -499,54 +632,55 @@ passes_checked:
                 if (minimal_zip_passes != 0) {
                     int d = std::floor(std::log10(passes)) + 1;
                     if (auto_passes) d = std::max(8, d); //d = auto_passes ? std::max(8, d) : d;
-                    std::string f = "%0" + std::to_string(d) + "u";
+                    std::wstring f = L"%0" + std::to_wstring(d) + L"u";
                     if (show_passes) {
-                        snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), minimal_zip_passes);
-                        arcname_out = arcname_out + ".best" + std::string(path_buf);
-                        snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), pass_counter);
-                        arcname_out = arcname_out + ".of" + std::string(path_buf);
+                        swprintf((wchar_t*)&wpath_buf, wpath_buf_length, f.c_str(), minimal_zip_passes);
+                        arcname_out = arcname_out + L".best" + std::wstring(wpath_buf);
+                        swprintf((wchar_t*)&wpath_buf, wpath_buf_length, f.c_str(), pass_counter);
+                        arcname_out = arcname_out + L".of" + std::wstring(wpath_buf);
                     }
                     if (show_full) {
                         if (old_detection) {
-                            snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), match_counter);
-                            arcname_out = arcname_out + ".match" + (is_full ? std::string(path_buf) : "-");
+                            swprintf((wchar_t*)&wpath_buf, wpath_buf_length, f.c_str(), match_counter);
+                            arcname_out = arcname_out + L".match" + (is_full ? std::wstring(wpath_buf) : L"-");
                         } else {
-                            snprintf((char*)&path_buf, sizeof(path_buf), f.c_str(), cycle_size);
-                            arcname_out = arcname_out + ".cycle" + (is_full ? std::string(path_buf) : "-");
+                            swprintf((wchar_t*)&wpath_buf, wpath_buf_length, f.c_str(), cycle_size);
+                            arcname_out = arcname_out + L".cycle" + (is_full ? std::wstring(wpath_buf) : L"-");
                         }
                     }
                     arcname_out += zipExt;
-                    std::string out_subdir = arcname_out.substr(0, path_length(arcname_out) - 1);
-                    if (GetFileAttributesA(out_subdir.c_str()) == (unsigned) -1) {
-                        std::cout << "Creating subdirectory \"" << out_subdir << "\"." << std::endl;
-                        if (mkdir(out_subdir.c_str()) != 0) {
-                            std::cerr << "\nError making directory \"" << out_subdir << "\"." << std::endl;
+                    std::wstring out_subdir = arcname_out.substr(0, wPath_length(arcname_out) - 1);
+                    if (GetFileAttributesW(out_subdir.c_str()) == (unsigned) -1) {
+                        std::cout << "Creating subdirectory \"" << wstring2string(out_subdir) << "\"." << std::endl;
+                        if (CreateDirectoryW(out_subdir.c_str(), NULL) == 0) { //(LPCWSTR lpPathName, LPSECURITY_ATTRIBUTES lpSecurityAttributes)
+                            std::cerr << "\nError making directory \"" << wstring2string(out_subdir) << "\"." << std::endl;
                         }
                     }
-                    std::cout << "Writing \"" << arcname_out << "\"." << std::endl;
-                    outfile = std::ofstream(arcname_out, std::ofstream::binary);
-                    if (!outfile) {
-                        std::cerr << "\nError writing archive \"" << arcname_out << "\"." << std::endl;
+                    std::cout << "Writing \"" << wstring2string(arcname_out) << "\"." << std::endl;
+                    outfile = CreateFileW(arcname_out.c_str(), GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+                    if (outfile == INVALID_HANDLE_VALUE) {
+                        std::cerr << "\nError writing archive \"" << wstring2string(arcname_out) << "\"." << std::endl;
                     } else {
-                        outfile.write(zip_storage[zip_indices[minimal_zip_passes - 1]].data(), minimal_zip_length); // save smallest archive
-                        outfile.close();
+                        unsigned bytes_written;
+                        WriteFile(outfile, zip_storage[zip_indices[minimal_zip_passes - 1]].data(), minimal_zip_length, (LPDWORD)&bytes_written, NULL); //(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToWrite, LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped)
+                        Close_File(&outfile);
                     }
                 } else
-                    std::cerr << "\nError compressing archive \"" << arcname_out << ".#.#.#" << zipExt << "\"." << std::endl;
+                    std::cerr << "\nError compressing archive \"" << wstring2string(arcname_out) << ".#.#.#.zip\"." << std::endl;
             } else { // single archive
                 if (minimal_zip_passes != 0) {
                     arcname_out = zipOutputDir + zipSingle;
                     if (redefine.size() == 0) {
                         //TODO: how to add *single* "path\file" to the archive with relative path kept?
-                        zip_cmd = arg_string[0] + " a -tzip -mx=9 -mmt=" + mmt + " -mtc=off -mfb=258 -mpass=" + std::to_string(minimal_zip_passes)
-                                  + " \"" + arcname_out + "\" \"" + arg_string[1] + "\"";
+                        zip_cmd = L"\"" + arg_string[0] + L"\" a -tzip -mx=9 -mmt=" + mmt + L" -mtc=off -mfb=258 -mpass=" + std::to_wstring(minimal_zip_passes)
+                                  + L" \"" + arcname_out + L"\" \"" + arg_string[1] + L"\"" + std::wstring(32768, L'\0');
                     } else {
                         zip_cmd = redefine;
                         for (int a = positions.size() - 1; a >= 0; a--) {
                             zip_cmd.erase(positions[a], 2);
                             switch (params[a]) {
                             case -1: // pass
-                                zip_cmd.insert(positions[a], std::to_string(minimal_zip_passes));
+                                zip_cmd.insert(positions[a], std::to_wstring(minimal_zip_passes));
                             break;
                             case 2:  // output archive
                                 zip_cmd.insert(positions[a], arcname_out);
@@ -556,17 +690,21 @@ passes_checked:
                             break;
                             }
                         }
+                        zip_cmd += std::wstring(32768, L'\0');
                     }
-                    std::cout << "Adding to \"" << arcname_out << "\"." << std::endl;
-                    std::cout << zip_cmd.c_str() << std::endl;
-                    system(zip_cmd.c_str());
+                    std::cout << "Adding to \"" << wstring2string(arcname_out) << "\"." << std::endl;
+                    std::cout << (char*)wstring2string(zip_cmd).c_str() << std::endl;
+                    CreateProcessW(NULL, (LPWSTR)zip_cmd.c_str(), NULL, NULL, false, CREATE_UNICODE_ENVIRONMENT, NULL, NULL, &si, &pi); //(LPCWSTR lpApplicationName, LPWSTR lpCommandLine, LPSECURITY_ATTRIBUTES lpProcessAttributes, LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory, LPSTARTUPINFO lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation)
+                    CloseHandle(pi.hThread);
+                    WaitForSingleObject(pi.hProcess, INFINITE);
+                    CloseHandle(pi.hProcess);
                 } else {
-                    std::cerr << "\nError compressing file \"" << arg_string[1] << "\"." << std::endl;
+                    std::cerr << "\nError compressing file \"" << wstring2string(arg_string[1]) << "\"." << std::endl;
                     break; // interrupt creation of single archive
                 }
             }
         } else
-            std::cerr << "\nCan not open file \"" << arg_string[1] << "\"." << std::endl;
+            std::cerr << "\nCan not open file \"" << wstring2string(arg_string[1]) << "\"." << std::endl;
     }
 
 //clean_end:
@@ -577,5 +715,9 @@ passes_checked:
     zip_storage.clear();
     params.clear();
     positions.clear();
-    return 0;
+    if (output_locale == CP_UTF8) {
+        SetConsoleOutputCP(GetOEMCP());
+        //SetConsoleCP(GetOEMCP());
+    }
+    return Close_All_Return(0);;
 }
