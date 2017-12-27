@@ -1,5 +1,5 @@
 # Zipper
-Searching best "`-mpass`" parameter for 7-Zip ZIP archives.
+Searches best "`-mpass`" parameter for 7-Zip ZIP archives.
 
 ---
 ### *Warning: the process is slow and shrinks only by a few bytes.*
@@ -23,7 +23,7 @@ Will compress all files from current directory to "output_directory\file.extensi
 <br>
 ### Current limitations:
 - When compressing to single archive, all files from subfolders will be in root folder of archive.
-- Parameters (i. e. directories/archive name) can be only in local codepage. But found filenames can have any codepage. The will not be shown correctly in console, but should be processed fine.
+- Parameters (i. e. directories/archive name) can be only in local codepage. But found filenames can have any codepage. They will not be shown correctly in console, but should be processed fine.
 
 ---
 ## Tuning:
@@ -41,7 +41,7 @@ Compress into single archive (instead of separate archives by default).<br>
 Disable adding ".best#.of#" to names of separate archives.<br>
 <br>
 **\-f** 0 *(zero)*<br>
-Omit ".cycle size/-" in names of separate archives (can help to find wrong results).<br>
+Omit ".cycle#" in names of separate archives (detected cycle, can help find wrong results).<br>
 <br>
 **\-p** #<br>
 Limit number of search passes. By default limited to 100. Set to 0 to search until memory limit (depending on compressing files, can be *very* slow).<br>
@@ -71,7 +71,7 @@ Redefine the archiving command. Template sequence `%c` is substituted with archi
 **Разница обычно в несколько байт, особого смысла в этом нет.**<br>
 Но если файлов очень много, несколько килобайт ужмутся.<br>
 <br>
-Для запуска требуется архиватор [7-Zip](http://7-zip.org/). Проверялась с версией 17.00<br>
+Для запуска требуется архиватор [7-Zip](http://7-zip.org/). Проверялась с версией 17.00.<br>
 Для компиляции нужен пакет [TCLAP](https://sourceforge.net/projects/tclap/).<br>
 
 ---
@@ -104,7 +104,7 @@ Redefine the archiving command. Template sequence `%c` is substituted with archi
 Не добавлять к именам раздельных архивов ".cycle#" (найденный размер цикла, помогает отследить возможно неправильные результаты).<br>
 <br>
 **\-p** #<br>
-Ограничить количество попыток (100 по умолчанию). Установите в ноль для неограниченного поиска, пока хватит памяти (в зависимости от сжимаемых данных, поиск может быть очень долгим).<br>
+Ограничить количество попыток (100 по умолчанию). Установите в ноль для неограниченного поиска, пока хватит памяти (в зависимости от сжимаемых данных, поиск может быть *очень* долгим).<br>
 <br>
 **\-b** #<br>
 Начать с # проходов. Например, если нужно продолжить поиск.<br>
