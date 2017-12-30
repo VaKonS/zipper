@@ -405,6 +405,7 @@ int main(int argc, char** argv) {
             unsigned cycle_size = 0;
             unsigned max_cycle = 0;
             unsigned max_cycle_start = 0;
+            unsigned max_cycle_multiple = 0;
             unsigned last_cycle_size = 0;
             unsigned last_cycle_start = 0;
             unsigned min_cycle = minimal_zip_length; // max
@@ -548,6 +549,7 @@ wrong_cycle:                                ; //nop
                                                     }
                                                     if (multiple > max_cycle) {
                                                         max_cycle = multiple;
+                                                        if (multiple > max_cycle_multiple) max_cycle_multiple = multiple;
                                                         max_cycle_start = last_cycle_start; // for prediction use last minimal cycle start until it will be updated by match, it seems to be correct
                                                     }
                                                     break;
@@ -572,6 +574,7 @@ wrong_cycle:                                ; //nop
                                                 }
                                             }
                                         }
+                                        if (c1 > max_cycle_multiple) if ((c1 % max_cycle) == 0) max_cycle_multiple = c1;
                                     } else
                                         cycleN_count[c] = 0;
                                 }
@@ -597,7 +600,7 @@ sample_added:           ; //nop
                         Close_File(&file_check);
                 } else
                     std::cerr << "\nCan not open archive \"" << wstring2string(arg_string[2]) << "\"." << std::endl;
-                if (max_cycle > 0) std::cout << "Estimated cycle: " << max_cycle << ", total passes: " << (max_cycle_start + max_cycle * 2) << "." << std::endl;
+                if (max_cycle > 0) std::cout << "Estimated cycle: " << max_cycle << ", total passes: " << (max_cycle_start + max_cycle_multiple * 2) << "." << std::endl;
                 if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold << std::endl;
                 p++;
                 if (auto_passes and (p >= passes)) {
