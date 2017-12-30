@@ -536,19 +536,19 @@ wrong_cycle:                                ; //nop
                                                 if (cs == 0) { // end of array, new minimal cycle found
                                                     cycleN_sizes[k] = c1;
                                                     // searching minimal multiple of all sizes
-                                                    unsigned multiple = c1;
+                                                    unsigned long long multiple = c1;
                                                     for (unsigned l = 0; l < k; l++) {
                                                         for (unsigned n = 1; n <= c1; n++) {
-                                                            unsigned m = cycleN_sizes[l] * n;
+                                                            unsigned long long m = cycleN_sizes[l] * n;
                                                             if ((m % c1) == 0) {
                                                                 if (m > multiple) multiple = m;
                                                                 break;
                                                             }
                                                         }
                                                     }
-                                                    if (multiple > max_cycle) {
+                                                    if (multiple > static_cast<unsigned long long>(max_cycle)) {
                                                         max_cycle = multiple;
-                                                        if (multiple > max_cycle_multiple) max_cycle_multiple = multiple;
+                                                        if (multiple > static_cast<unsigned long long>(max_cycle_multiple)) max_cycle_multiple = multiple;
                                                         max_cycle_start = last_cycle_start; // for prediction use last minimal cycle start until it will be updated by match, it seems to be correct
                                                     }
                                                     break;
