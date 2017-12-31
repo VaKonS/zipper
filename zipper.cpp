@@ -493,8 +493,8 @@ int main(int argc, char** argv) {
                                             }
                                         } else { // new detection
                                             cycle_size = p - c;
+                                            cycleN_match[cycle_size - 1] = true;
                                             if (cycle_size >= detect_threshold) {
-                                                cycleN_match[cycle_size - 1] = true;
                                                 int cycle_start = c - cycle_size + 1; // 1st match already found
                                                 if (cycle_start >= 0) {
                                                     unsigned dc = 1;
@@ -581,8 +581,10 @@ wrong_cycle:                                ; //nop
                                 //std::cout << "Matched sample, referencing previous copy." << std::endl;
                                 zip_indices[p] = zip_indices[add_index];
                                 goto sample_added;
-                            } else
+                            } else {
                                 cycleN_count.assign(passes, 0); // resetting matches counters
+                                max_cycle_start = p - max_cycle_multiple;
+                            }
                         } else
                             match_counter = 0; // new detection does not use match_counter
                         //std::cout << "Adding new archive." << std::endl;
@@ -599,9 +601,9 @@ sample_added:           ; //nop
                         Close_File(&file_check);
                 } else
                     std::cerr << "\nCan not open archive \"" << wstring2string(arg_string[2]) << "\"." << std::endl;
-                if (max_cycle > 0) std::cout << "Estimated cycle: " << max_cycle << ", total passes: " << (max_cycle_start + max_cycle_multiple * 2) << "." << std::endl;
-                if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold << std::endl;
                 p++;
+                if (max_cycle > 0) std::cout << "Estimated cycle: " << max_cycle_multiple << ", total passes: " << (max_cycle_start + max_cycle_multiple * 2) << "." << std::endl;
+                if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold << std::endl;
                 if (auto_passes and (p >= passes)) {
                     unsigned prev_passes = passes;
                     passes = (passes + max_cycle_start + max_cycle) * 3;
