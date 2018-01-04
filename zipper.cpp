@@ -26,6 +26,7 @@ HANDLE outfile = INVALID_HANDLE_VALUE;
 bool show_passes, show_full, is_full, old_detection;
 unsigned passes, begin, detect_threshold;
 size_t mem_limit, mem_use;
+time_t StartTime;
 std::wstring zipTempDir, zipInputDir, zipOutputDir, arcname_out, mmt, redefine, zipSingle, zip_cmd;
 std::wstring arg_string[4]; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
 char * locale_name;
@@ -51,9 +52,8 @@ _wdirent * dir_entry;
 std::vector<std::vector<char>> zip_storage;
 std::vector<int> zip_indices; // zip_storage indices
 std::vector<char> zip_pass1;
-std::vector<unsigned> cycleN_count;
 std::vector<bool> cycleN_match;
-std::vector<unsigned> cycleN_sizes;
+std::vector<unsigned> cycleN_count, cycleN_sizes, cycleN_previous, cycleN_period, period_sums, period_group_minimals;
 wchar_t wpath_buf[32768];
 const size_t wpath_buf_length = sizeof(wpath_buf) / sizeof(wchar_t);
 wchar_t wchar_buf[32768];
@@ -181,6 +181,54 @@ std::wstring wTrailSlash(std::wstring s) {
     return s + L"\\";
 }
 
+unsigned MinimalMultiple(std::vector<unsigned> a, unsigned k) { // array[passes], index of last used element
+    unsigned l1 = a[k];
+    unsigned multiple = l1;
+    for (unsigned l = 0; l < k; l++) {
+        for (unsigned n = 1; n <= l1; n++) {
+            unsigned long long m = a[l] * n;
+            if ((m % l1) == 0) {
+                if (m > (unsigned long long) 0x0ffffffff) {
+                    std::cerr << "\nMinimalMultiple: cycle size does not fit to long integer." << std::endl;
+                    return unsigned(-1);
+                }
+                if (m > multiple) multiple = m;
+                break;
+            }
+        }
+    }
+    return multiple;
+}
+
+std::string dhms(double s) {
+    std::string r;
+    int remain = std::round(s);
+    int days = remain / 86400;
+    if (days) {
+        r = r + std::to_string(days) + " day";
+        if (days > 1) r += "s";
+    }
+    remain %= 86400;
+    int hours = remain / 3600;
+    if (hours) {
+        if (days) r += " ";
+        r = r + std::to_string(hours) + " hour";
+        if (hours > 1) r += "s";
+        remain %= 3600;
+    }
+    int minutes = remain / 60;
+    if (minutes) {
+        if (days || hours) r += " ";
+        r = r + std::to_string(minutes) + " minute";
+        if (minutes > 1) r += "s";
+        remain %= 60;
+    }
+    if (days || hours || minutes) r += " ";
+    r = r + std::to_string(remain) + " second";
+    if (remain > 1) r += "s";
+    return r + " (" + std::to_string(s) + " second" + ((s > 1)?"s)":")");
+}
+
 std::string papl(unsigned n) {return (n == 1) ? " pass" : " passes";}
 std::string bypl(unsigned n) {return (n == 1) ? "byte" : "bytes";}
 
@@ -207,7 +255,7 @@ int main(int argc, char** argv) {
 
     // definition of command line arguments   abcdefghijklmnopqrstuvwxyz
     //                                        abcd.f..i..lmnop.rst......
-    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.5");
+    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.51");
 
     TCLAP::ValueArg<std::string> cmdInputDir("i", "input-mask",
                     "Directory with files to compress.\nRun Zipper from this directory to avoid paths inside archives. [.]", false,
@@ -379,6 +427,10 @@ int main(int argc, char** argv) {
         cycleN_count.resize(passes);
         cycleN_match.resize(passes);
         cycleN_sizes.resize(passes);
+        cycleN_previous.resize(passes);
+        cycleN_period.resize(passes);
+        period_sums.resize(passes);
+        period_group_minimals.resize(passes);
     }
 
     // processing file list
@@ -391,6 +443,8 @@ int main(int argc, char** argv) {
 
             arg_string[2] = zipTempDir + dir_list[i].substr(wPath_length(dir_list[i])) + zipExt; // input name without path
             std::cout << "Testing: " << wstring2string(arg_string[2]) << std::endl;
+
+            StartTime = time(NULL);
 
             for (unsigned p = 0; p < zip_storage.size(); p++) zip_storage[p].clear(); // freeing memory
             zip_storage.clear();
@@ -414,14 +468,15 @@ int main(int argc, char** argv) {
             }
             unsigned p = begin - 1;
             while (p < passes) {
-                std::cout << "-------------------------------------\nPass: " << (p + 1) << "/" << passes;
+                unsigned p1 = p + 1;
+                std::cout << "-------------------------------------\nPass: " << p1 << "/" << passes;
                 if (minimal_zip_passes == 0) {
                     std::cout << std::endl;
                 } else {
                     std::cout << ", minimal packed size: " << minimal_zip_length << " " << bypl(minimal_zip_length) << " (" << (minimal_zip_passes) << papl(minimal_zip_passes) << ")." << std::endl;
                 }
                 if (redefine.size() == 0) {
-                    zip_cmd = L"\"" + arg_string[0] + L"\" a -tzip -mx=9 -mmt=" + mmt + L" -mtc=off -mfb=258 -mpass=" + std::to_wstring(p + 1)
+                    zip_cmd = L"\"" + arg_string[0] + L"\" a -tzip -mx=9 -mmt=" + mmt + L" -mtc=off -mfb=258 -mpass=" + std::to_wstring(p1)
                               + L" \"" + arg_string[2] + L"\" \"" + arg_string[1] + L"\"" + std::wstring(32768, L'\0');
                 } else {
                     zip_cmd = redefine;
@@ -430,7 +485,7 @@ int main(int argc, char** argv) {
                         if (params[a] != -1) {
                             zip_cmd.insert(positions[a], arg_string[params[a]]);
                         } else {
-                            zip_cmd.insert(positions[a], std::to_wstring(p + 1));
+                            zip_cmd.insert(positions[a], std::to_wstring(p1));
                         }
                     }
                     zip_cmd += std::wstring(32768, L'\0');
@@ -454,7 +509,7 @@ int main(int argc, char** argv) {
                         Close_File(&file_check);
                         if (zipSingle.size() != 0) { // when packing to single archive, memory storage is not used and smaller size can still be packed
                             if (zip_length > 0) if (zip_length < minimal_zip_length) {
-                                pass_counter = p + 1;
+                                pass_counter = p1;
                                 minimal_zip_length = zip_length;
                                 minimal_zip_passes = pass_counter;
                             }
@@ -464,7 +519,7 @@ int main(int argc, char** argv) {
                     unsigned m = std::max((unsigned)0, std::min( (mem_limit - mem_use - zip_length), (static_cast<unsigned>(mem_stat.dwAvailPhys) - zip_length) ) ) >> 20;
                     std::cout << "Memory left: " << m << " mega" << bypl(m) << std::endl;
                     if (zip_length > 0) {
-                        pass_counter = p + 1;
+                        pass_counter = p1;
                         zip_pass1.resize(zip_length);
                         unsigned bytes_read;
                         ReadFile(file_check, zip_pass1.data(), zip_length, (LPDWORD)&bytes_read, NULL); //(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead, LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped)
@@ -493,8 +548,9 @@ int main(int argc, char** argv) {
                                             }
                                         } else { // new detection
                                             cycle_size = p - c;
-                                            cycleN_match[cycle_size - 1] = true;
+cycleN_match[cycle_size - 1] = true;
                                             if (cycle_size >= detect_threshold) {
+//                                                cycleN_match[cycle_size - 1] = true;
                                                 int cycle_start = c - cycle_size + 1; // 1st match already found
                                                 if (cycle_start >= 0) {
                                                     unsigned dc = 1;
@@ -509,8 +565,8 @@ int main(int argc, char** argv) {
                                                     }
                                                     std::cout << //"Cycle: " << dc << "/" << cycle_size << ".\n"
                                                                  "Compression cycling detected, " << cycle_size << " archives. More passes should not be necessary." << std::endl;
-                                                    is_full = true;
-                                                    goto passes_checked;
+//                                                    is_full = true;
+//                                                    goto passes_checked;
                                                 }
                                             }
 wrong_cycle:                                ; //nop
@@ -574,10 +630,96 @@ wrong_cycle:                                ; //nop
                                             }
                                         }
                                         if (c1 > max_cycle_multiple) if ((c1 % max_cycle) == 0) max_cycle_multiple = c1;
+
+//24  48  72  96  120 144 168 192 216 240 264 288 312 336 360 384 408 432 456 480 504 528 552 576 600 624 648 672 696 720 744 ... 1440
+//                        *1                          *2                          *3                          *4                          --------
+//                    *1                      *2                      *3                      *4                      *5                  --------
+//                *1                  *2                  *3                  *4                  *5                  *6          *
+//            *1              *2              *3              *4              *5              *6              *7                  *       --------
+//        *1          *2          *3          *4          *5          *6          *7          *8          *9          *10         *
+//    *1      *2      *3      *4      *5      *6      *7      *8      *9      *10     *11     *12     *13     *14     *15         *       --------
+//*1  *2  *3  *4  *5  *6  *7  *8  *9  *10 *11 *12 *13 *14 *15 *16 *17 *18 *19 *20 *21 *22 *23 *24 *25 *26 *27 *28 *29 *30 *       *
+//------------------------------------------------------------------------------------------------------------------------------------
+//01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50
+//                     *1    *1
+//                     .        .        .        *2       *2       .        *2       *2       .        *2       *2       .        *2       *2       .
+//                     .                       .                          *6                         *6                         *6
+//.                          .                          .                          *12                        *12                        *12
+//                                    .                                                     *18                                                   *18
+//                        .        .        .        .        .        .        .        .        *16      *16      .        *16      *16      .
+//                     .        .        .        .        .        .        .        .        .        *20      *20      .        *20      *20
+//                                                                                                                              *24
+//                                                                                                                                       *30
+                                        // count 1, count repeats, limit to multiple?
+                                        if (/* (cycleN_count[c] == 1) || */ ((cycleN_count[c] % c1) == 1)) { // cycle is started
+                                            unsigned s = p1 - cycleN_previous[c]; // start period
+                                            if ((cycleN_period[c] == 0) || (s < cycleN_period[c])) {
+                                                cycleN_period[c] = s;
+                                            }
+                                            cycleN_previous[c] = p1;
+                                        }
+
                                     } else
                                         cycleN_count[c] = 0;
                                 }
                                 if (!line_start) std::cout << "." << std::endl;
+
+                                std::cout << "Periods:";
+                                for (unsigned c = 0; c < passes; c++) if (cycleN_period[c] != 0)
+                                    std::cout << " " << (c + 1) << ":" << cycleN_period[c];
+                                std::cout << "." << std::endl;
+// 18:  Periods: 2:3 6:9 12:9 16:3 18:18 20:3 24:9 30:9 34:3 36:36 38:3 42:9 48:9 52:3 54:67 56:3 60:79 66:82 72:85.
+// 20:  Periods: 10:2 20:2 30:2 40:2 50:2 60:2.
+// 24:  Periods: 24:4 48:4.
+// 36:  Periods: 12:2 24:2 36:36 48:2 60:2 72:89 84:2 96:113.
+// 60:  Periods: 2:8 12:2 24:2 36:2 48:2 60:3 72:2 84:2 96:2 108:2 120:3 132:2 144:2 156:2 168:2 180:3.
+// 360: Periods: 24:4 48:4 72:2 96:4 120:2 144:2 168:4 192:4 216:2 240:2 264:4 288:2 312:4 336:4 360:3 384:4.
+                                period_sums.assign(passes, 0);
+                                // odd groups, sum
+                                for (unsigned c = 0; c < passes; c++) {
+                                    unsigned cp = cycleN_period[c];
+                                    if (cp & 1) {
+                                        cp--;
+                                        period_sums[cp] += (c + 1);
+                                    }
+                                }
+                                unsigned group_minimal = unsigned(-1);
+                                for (unsigned c = 0; c < passes; c++) if (period_sums[c] != 0) {
+                                    if (group_minimal == unsigned(-1)) std::cout << "Odd groups:";
+                                    std::cout << " " << (c + 1) << ":" << period_sums[c];
+                                    if (period_sums[c] < group_minimal) group_minimal = period_sums[c];
+                                }
+                                if (group_minimal != unsigned(-1)) std::cout << ", minimal: " << group_minimal << std::endl;
+
+                                // even groups, multiple of minimals?
+                                unsigned multiple = 0;
+                                for (unsigned g = 2; g <= passes; g = g + 2) { // even groups
+                                    period_group_minimals.assign(passes, 0); // reset minimals list
+                                    unsigned kmax = 0;
+                                    for (unsigned c = 0; c < passes; c++) {
+                                        if (cycleN_period[c] == g) { // same group
+                                            for (unsigned k = 0; k < kmax; k++)
+                                                if (((c + 1) % period_group_minimals[k]) == 0) goto group_minimal_present;
+                                            period_group_minimals[kmax] = c + 1; // new minimal
+                                            kmax++;
+                                            group_minimal_present: ;
+                                        }
+                                    }
+                                    if (kmax) {
+                                        std::cout << "Even group " << g << ", minimals:";
+                                        for (unsigned c = 0; c < kmax; c++)
+                                            std::cout << " " << period_group_minimals[c];
+                                        unsigned m = MinimalMultiple(period_group_minimals, kmax - 1); // array[passes], index of last used element
+                                        if (m == unsigned(-1)) goto passes_checked; // error
+                                        std::cout << ", multiple: " << m << std::endl;
+                                        if (m > multiple) multiple = m;
+                                    }
+                                }
+                                if (max_cycle_multiple > multiple) multiple = max_cycle_multiple;
+                                if (multiple < group_minimal) group_minimal = multiple;
+                                std::cout << "Estimated: " << group_minimal << std::endl;
+
+
                                 //std::cout << "Matched sample, referencing previous copy." << std::endl;
                                 zip_indices[p] = zip_indices[add_index];
                                 goto sample_added;
@@ -594,7 +736,7 @@ wrong_cycle:                                ; //nop
                         mem_use += zip_length;
                         if ((unsigned) zip_length < minimal_zip_length) {
                             minimal_zip_length = zip_length;
-                            minimal_zip_passes = pass_counter; // p + 1
+                            minimal_zip_passes = pass_counter;
                         }
 sample_added:           ; //nop
                     } else
@@ -602,7 +744,16 @@ sample_added:           ; //nop
                 } else
                     std::cerr << "\nCan not open archive \"" << wstring2string(arg_string[2]) << "\"." << std::endl;
                 p++;
-                if (max_cycle > 0) std::cout << "Estimated cycle: " << max_cycle_multiple << ", total passes: " << (max_cycle_start + max_cycle_multiple * 2) << "." << std::endl;
+                if (max_cycle > 0) {
+                    // passes = n*(n+1)/2
+                    // k = n2/n1
+                    // p2/p1 = k*(n1*k+1)/(n1+1) = n2*(n2+1)/n1/(n1+1)
+                    unsigned tp = max_cycle_start + max_cycle_multiple * 2; // + ((max_cycle_multiple == 1)?1:0);
+                    double k = static_cast<double>(tp) * (tp + 1) / static_cast<double>(p) / p1;
+                    std::cout << "Time: " << dhms(difftime(time(NULL), StartTime)) << "." << std::endl;
+                    std::cout << "Estimated cycle: " << max_cycle_multiple << ", total passes: " << tp
+                              << ", time left: " << dhms((k - 1) * difftime(time(NULL), StartTime)) << "." << std::endl; //k*CurrentSeconds-CurrentSeconds
+                }
                 if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold << std::endl;
                 if (auto_passes and (p >= passes)) {
                     unsigned prev_passes = passes;
@@ -614,6 +765,10 @@ sample_added:           ; //nop
                         cycleN_count.resize(passes);
                         cycleN_match.resize(passes);
                         cycleN_sizes.resize(passes);
+                        cycleN_previous.resize(passes);
+                        cycleN_period.resize(passes);
+                        period_sums.resize(passes);
+                        period_group_minimals.resize(passes);
                         //for (unsigned l = prev_passes; l < passes; l++) {
                         //    cycleN_count[l] = 0;
                         //    cycleN_match[l] = 0;
@@ -627,10 +782,10 @@ passes_checked:
             DeleteFileW(arg_string[2].c_str());
             if (minimal_zip_passes != 0) {
                 std::cout << "Minimum archive size: " << minimal_zip_length << " " << bypl(minimal_zip_length) << " (" << (minimal_zip_passes) << papl(minimal_zip_passes) << ")." << std::endl;
+                std::cout << "Time: " << difftime(time(NULL), StartTime) << " seconds." << std::endl;
             } else {
                 std::cout << "No archives were created." << std::endl;
             }
-
             if (zipSingle.size() == 0) {
                 arcname_out = zipOutputDir + dir_list[i];
                 if (minimal_zip_passes != 0) {
