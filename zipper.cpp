@@ -202,31 +202,31 @@ unsigned MinimalMultiple(std::vector<unsigned> a, unsigned k) { // array[passes]
 
 std::string dhms(double s) {
     std::string r;
-    int remain = std::round(s);
+    int remain = std::ceil(s);
     int days = remain / 86400;
     if (days) {
         r = r + std::to_string(days) + " day";
-        if (days > 1) r += "s";
+        if (days != 1) r += "s";
     }
     remain %= 86400;
     int hours = remain / 3600;
     if (hours) {
         if (days) r += " ";
         r = r + std::to_string(hours) + " hour";
-        if (hours > 1) r += "s";
+        if (hours != 1) r += "s";
         remain %= 3600;
     }
     int minutes = remain / 60;
     if (minutes) {
         if (days || hours) r += " ";
         r = r + std::to_string(minutes) + " minute";
-        if (minutes > 1) r += "s";
+        if (minutes != 1) r += "s";
         remain %= 60;
     }
     if (days || hours || minutes) r += " ";
     r = r + std::to_string(remain) + " second";
-    if (remain > 1) r += "s";
-    return r + " (" + std::to_string(s) + " second" + ((s > 1)?"s)":")");
+    if (remain != 1) r += "s";
+    return r; // + " (" + std::to_string(s) + " second" + ((s != 1)?"s)":")");
 }
 
 std::string papl(unsigned n) {return (n == 1) ? " pass" : " passes";}
@@ -245,7 +245,6 @@ int main(int argc, char** argv) {
     }
     //system("graftabl");
     locale_name = setlocale(LC_ALL, NULL);
-    std::cout << "Locale: " << ((locale_name == NULL)?"error getting locale name.":std::string(locale_name)) << std::endl;
 
     if (GetEnvironmentVariableW(L"ProgramFiles", (LPWSTR)&wpath_buf, wpath_buf_length) >= wpath_buf_length) {
         std::cerr << "GetEnvironmentVariable: wide characters buffer is too small." << std::endl;
@@ -255,7 +254,7 @@ int main(int argc, char** argv) {
 
     // definition of command line arguments   abcdefghijklmnopqrstuvwxyz
     //                                        abcd.f..i..lmnop.rst......
-    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.51");
+    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.6");
 
     TCLAP::ValueArg<std::string> cmdInputDir("i", "input-mask",
                     "Directory with files to compress.\nRun Zipper from this directory to avoid paths inside archives. [.]", false,
@@ -323,6 +322,7 @@ int main(int argc, char** argv) {
     }
 
     // command line accepted, begin console processing
+    std::cout << "Locale: " << ((locale_name == NULL)?"error getting locale name.":std::string(locale_name)) << std::endl;
     arg_string[0]      = oemstring2wstring(cmd7Zip.getValue()); // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
     zipTempDir         = oemstring2wstring(cmdTempDir.getValue());
     zipInputDir        = oemstring2wstring(cmdInputDir.getValue());
@@ -462,9 +462,12 @@ int main(int argc, char** argv) {
             unsigned max_cycle_multiple = 0;
             unsigned last_cycle_size = minimal_zip_length; // max
             unsigned last_cycle_start = 0;
+            bool both_groups = false, prev_groups = false;
             if (!old_detection) {
                 cycleN_count.assign(passes, 0);
                 cycleN_sizes.assign(passes, 0);
+                cycleN_previous.assign(passes, 0);
+                cycleN_period.assign(passes, 0);
             }
             unsigned p = begin - 1;
             while (p < passes) {
@@ -496,6 +499,7 @@ int main(int argc, char** argv) {
                 WaitForSingleObject(pi.hProcess, INFINITE);
                 CloseHandle(pi.hProcess);
 
+                unsigned estimated = max_cycle_multiple;
                 file_check = CreateFileW(arg_string[2].c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
                 if (file_check != INVALID_HANDLE_VALUE) {
                     unsigned zip_length = GetFileSize(file_check, NULL); //(HANDLE hFile, LPDWORD lpdwFileSizeHigh)
@@ -548,9 +552,8 @@ int main(int argc, char** argv) {
                                             }
                                         } else { // new detection
                                             cycle_size = p - c;
-cycleN_match[cycle_size - 1] = true;
+                                            cycleN_match[cycle_size - 1] = true;
                                             if (cycle_size >= detect_threshold) {
-//                                                cycleN_match[cycle_size - 1] = true;
                                                 int cycle_start = c - cycle_size + 1; // 1st match already found
                                                 if (cycle_start >= 0) {
                                                     unsigned dc = 1;
@@ -565,8 +568,8 @@ cycleN_match[cycle_size - 1] = true;
                                                     }
                                                     std::cout << //"Cycle: " << dc << "/" << cycle_size << ".\n"
                                                                  "Compression cycling detected, " << cycle_size << " archives. More passes should not be necessary." << std::endl;
-//                                                    is_full = true;
-//                                                    goto passes_checked;
+                                                    is_full = true;
+                                                    goto passes_checked;
                                                 }
                                             }
 wrong_cycle:                                ; //nop
@@ -592,23 +595,13 @@ wrong_cycle:                                ; //nop
                                                 if (cs == 0) { // end of array, new minimal cycle found
                                                     cycleN_sizes[k] = c1;
                                                     // searching minimal multiple of all sizes
-                                                    unsigned multiple = c1;
-                                                    for (unsigned l = 0; l < k; l++) {
-                                                        for (unsigned n = 1; n <= c1; n++) {
-                                                            unsigned long long m = cycleN_sizes[l] * n;
-                                                            if ((m % c1) == 0) {
-                                                                if (m > (unsigned long long) 0x0ffffffff) {
-                                                                    std::cerr << "\nCycle size does not fit to long integer." << std::endl;
-                                                                    goto passes_checked;
-                                                                }
-                                                                if (m > multiple) multiple = m;
-                                                                break;
-                                                            }
-                                                        }
-                                                    }
+                                                    unsigned multiple = MinimalMultiple(cycleN_sizes, k); // array[passes], index of last used element
                                                     if (multiple > max_cycle) {
                                                         max_cycle = multiple;
-                                                        if (multiple > max_cycle_multiple) max_cycle_multiple = multiple;
+                                                        if (multiple > max_cycle_multiple) {
+                                                            max_cycle_multiple = multiple;
+                                                            estimated = max_cycle_multiple;
+                                                        }
                                                         max_cycle_start = last_cycle_start; // for prediction use last minimal cycle start until it will be updated by match, it seems to be correct
                                                     }
                                                     break;
@@ -629,7 +622,11 @@ wrong_cycle:                                ; //nop
                                                 }
                                             }
                                         }
-                                        if (c1 > max_cycle_multiple) if ((c1 % max_cycle) == 0) max_cycle_multiple = c1;
+                                        if (prev_groups && !both_groups) // set max_cycle_multiple when cycle is stabilyzed
+                                            if (c1 > max_cycle_multiple) if ((c1 % max_cycle) == 0) {
+                                                max_cycle_multiple = c1;
+                                                estimated = max_cycle_multiple;
+                                            }
 
 //24  48  72  96  120 144 168 192 216 240 264 288 312 336 360 384 408 432 456 480 504 528 552 576 600 624 648 672 696 720 744 ... 1440
 //                        *1                          *2                          *3                          *4                          --------
@@ -664,10 +661,12 @@ wrong_cycle:                                ; //nop
                                 }
                                 if (!line_start) std::cout << "." << std::endl;
 
-                                std::cout << "Periods:";
-                                for (unsigned c = 0; c < passes; c++) if (cycleN_period[c] != 0)
-                                    std::cout << " " << (c + 1) << ":" << cycleN_period[c];
-                                std::cout << "." << std::endl;
+                                prev_groups = both_groups; // 1 pass delay
+
+                                //std::cout << "Periods:";
+                                //for (unsigned c = 0; c < passes; c++) if (cycleN_period[c] != 0)
+                                //    std::cout << " " << (c + 1) << ":" << cycleN_period[c];
+                                //std::cout << "." << std::endl;
 // 18:  Periods: 2:3 6:9 12:9 16:3 18:18 20:3 24:9 30:9 34:3 36:36 38:3 42:9 48:9 52:3 54:67 56:3 60:79 66:82 72:85.
 // 20:  Periods: 10:2 20:2 30:2 40:2 50:2 60:2.
 // 24:  Periods: 24:4 48:4.
@@ -676,22 +675,27 @@ wrong_cycle:                                ; //nop
 // 360: Periods: 24:4 48:4 72:2 96:4 120:2 144:2 168:4 192:4 216:2 240:2 264:4 288:2 312:4 336:4 360:3 384:4.
                                 period_sums.assign(passes, 0);
                                 // odd groups, sum
+                                bool odd_group = false;
                                 for (unsigned c = 0; c < passes; c++) {
                                     unsigned cp = cycleN_period[c];
                                     if (cp & 1) {
                                         cp--;
                                         period_sums[cp] += (c + 1);
+                                        odd_group = true;
                                     }
                                 }
-                                unsigned group_minimal = unsigned(-1);
-                                for (unsigned c = 0; c < passes; c++) if (period_sums[c] != 0) {
-                                    if (group_minimal == unsigned(-1)) std::cout << "Odd groups:";
-                                    std::cout << " " << (c + 1) << ":" << period_sums[c];
-                                    if (period_sums[c] < group_minimal) group_minimal = period_sums[c];
+                                estimated = unsigned(-1);
+                                if (odd_group) {
+                                    //std::cout << "Odd groups:";
+                                    for (unsigned c = 0; c < passes; c++) if (period_sums[c] != 0) {
+                                        //std::cout << " " << (c + 1) << ":" << period_sums[c];
+                                        if (period_sums[c] < estimated) estimated = period_sums[c];
+                                    }
+                                    //std::cout << ", minimal: " << estimated << std::endl;
                                 }
-                                if (group_minimal != unsigned(-1)) std::cout << ", minimal: " << group_minimal << std::endl;
 
                                 // even groups, multiple of minimals?
+                                bool even_group = false;
                                 unsigned multiple = 0;
                                 for (unsigned g = 2; g <= passes; g = g + 2) { // even groups
                                     period_group_minimals.assign(passes, 0); // reset minimals list
@@ -706,19 +710,19 @@ wrong_cycle:                                ; //nop
                                         }
                                     }
                                     if (kmax) {
-                                        std::cout << "Even group " << g << ", minimals:";
-                                        for (unsigned c = 0; c < kmax; c++)
-                                            std::cout << " " << period_group_minimals[c];
+                                        //std::cout << "Even group " << g << ", minimals:";
+                                        //for (unsigned c = 0; c < kmax; c++) std::cout << " " << period_group_minimals[c];
                                         unsigned m = MinimalMultiple(period_group_minimals, kmax - 1); // array[passes], index of last used element
                                         if (m == unsigned(-1)) goto passes_checked; // error
-                                        std::cout << ", multiple: " << m << std::endl;
+                                        //std::cout << ", multiple: " << m << std::endl;
                                         if (m > multiple) multiple = m;
+                                        even_group = true;
                                     }
                                 }
-                                if (max_cycle_multiple > multiple) multiple = max_cycle_multiple;
-                                if (multiple < group_minimal) group_minimal = multiple;
-                                std::cout << "Estimated: " << group_minimal << std::endl;
-
+                                both_groups = odd_group && even_group;
+                                estimated = std::min(estimated, std::max(multiple, max_cycle_multiple));
+                                //std::cout << "Estimated: " << estimated << std::endl;
+                                max_cycle_start = p1 - estimated - cycleN_count[estimated - 1];
 
                                 //std::cout << "Matched sample, referencing previous copy." << std::endl;
                                 zip_indices[p] = zip_indices[add_index];
@@ -745,14 +749,15 @@ sample_added:           ; //nop
                     std::cerr << "\nCan not open archive \"" << wstring2string(arg_string[2]) << "\"." << std::endl;
                 p++;
                 if (max_cycle > 0) {
+                    if (estimated < detect_threshold) estimated = detect_threshold;
                     // passes = n*(n+1)/2
                     // k = n2/n1
                     // p2/p1 = k*(n1*k+1)/(n1+1) = n2*(n2+1)/n1/(n1+1)
-                    unsigned tp = max_cycle_start + max_cycle_multiple * 2; // + ((max_cycle_multiple == 1)?1:0);
+                    unsigned tp = max_cycle_start + estimated * 2; // + ((estimated == 1)?1:0);
                     double k = static_cast<double>(tp) * (tp + 1) / static_cast<double>(p) / p1;
-                    std::cout << "Time: " << dhms(difftime(time(NULL), StartTime)) << "." << std::endl;
-                    std::cout << "Estimated cycle: " << max_cycle_multiple << ", total passes: " << tp
-                              << ", time left: " << dhms((k - 1) * difftime(time(NULL), StartTime)) << "." << std::endl; //k*CurrentSeconds-CurrentSeconds
+                    //std::cout << "Time: " << dhms(difftime(time(NULL), StartTime)) << "." << std::endl;
+                    std::cout << "Estimated cycle: " << estimated << ", total passes: " << tp
+                              << ".\nTime left: " << dhms((k - 1) * difftime(time(NULL), StartTime)) << "." << std::endl; //k*CurrentSeconds-CurrentSeconds
                 }
                 if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold << std::endl;
                 if (auto_passes and (p >= passes)) {
@@ -782,7 +787,7 @@ passes_checked:
             DeleteFileW(arg_string[2].c_str());
             if (minimal_zip_passes != 0) {
                 std::cout << "Minimum archive size: " << minimal_zip_length << " " << bypl(minimal_zip_length) << " (" << (minimal_zip_passes) << papl(minimal_zip_passes) << ")." << std::endl;
-                std::cout << "Time: " << difftime(time(NULL), StartTime) << " seconds." << std::endl;
+                std::cout << "Time: " << dhms(difftime(time(NULL), StartTime)) << "." << std::endl;
             } else {
                 std::cout << "No archives were created." << std::endl;
             }
