@@ -462,7 +462,7 @@ int main(int argc, char** argv) {
             unsigned max_cycle_multiple = 0;
             unsigned last_cycle_size = minimal_zip_length; // max
             unsigned last_cycle_start = 0;
-            bool both_groups = false, prev_groups = false;
+            bool unstable_cycles = false, prev_unstable_cycles = false;
             if (!old_detection) {
                 cycleN_count.assign(passes, 0);
                 cycleN_sizes.assign(passes, 0);
@@ -568,8 +568,8 @@ int main(int argc, char** argv) {
                                                     }
                                                     std::cout << //"Cycle: " << dc << "/" << cycle_size << ".\n"
                                                                  "Compression cycling detected, " << cycle_size << " archives. More passes should not be necessary." << std::endl;
-                                                    is_full = true;
-                                                    goto passes_checked;
+//                                                    is_full = true;
+//                                                    goto passes_checked;
                                                 }
                                             }
 wrong_cycle:                                ; //nop
@@ -584,25 +584,26 @@ wrong_cycle:                                ; //nop
                                 for (unsigned c = 0; c < passes; c++) {
                                     if (cycleN_match[c]) {
                                         unsigned c1 = c + 1;
-                                        //std::cout << "cycleN_match[" << c1 << "]" << std::endl;
                                         cycleN_count[c]++;
-                                        //std::cout << "cycleN_count[c]: " << cycleN_count[c] << std::endl;
                                         if (line_start) {
                                             // checking minimal cycle sizes array
                                             for (unsigned k = 0; k < passes; k++) {
                                                 unsigned cs = cycleN_sizes[k];
-                                                //std::cout << "cycleN_sizes[" << k << "]: " << cs << std::endl;
                                                 if (cs == 0) { // end of array, new minimal cycle found
                                                     cycleN_sizes[k] = c1;
                                                     // searching minimal multiple of all sizes
                                                     unsigned multiple = MinimalMultiple(cycleN_sizes, k); // array[passes], index of last used element
                                                     if (multiple > max_cycle) {
-                                                        max_cycle = multiple;
-                                                        if (multiple > max_cycle_multiple) {
-                                                            max_cycle_multiple = multiple;
-                                                            estimated = max_cycle_multiple;
+                                                        if (multiple == unsigned(-1)) goto passes_checked; // error
+                                                        if (!max_cycle || (prev_unstable_cycles && !unstable_cycles)) {
+std::cout << "set1, prev_unstable_cycles, unstable_cycles" << prev_unstable_cycles << unstable_cycles << std::endl;
+                                                            max_cycle = multiple;
+                                                            if (multiple > max_cycle_multiple) {
+                                                                max_cycle_multiple = multiple;
+                                                                estimated = max_cycle_multiple;
+                                                            }
+                                                            max_cycle_start = last_cycle_start; // for prediction use last minimal cycle start until it will be updated by match, it seems to be correct
                                                         }
-                                                        max_cycle_start = last_cycle_start; // for prediction use last minimal cycle start until it will be updated by match, it seems to be correct
                                                     }
                                                     break;
                                                 }
@@ -622,11 +623,83 @@ wrong_cycle:                                ; //nop
                                                 }
                                             }
                                         }
-                                        if (prev_groups && !both_groups) // set max_cycle_multiple when cycle is stabilyzed
-                                            if (c1 > max_cycle_multiple) if ((c1 % max_cycle) == 0) {
+                                        if ((c1 > max_cycle_multiple) && (prev_unstable_cycles && !unstable_cycles)) // set max_cycle_multiple when cycle is stabilyzed
+                                            if ((c1 % max_cycle) == 0) {
                                                 max_cycle_multiple = c1;
                                                 estimated = max_cycle_multiple;
+std::cout << "set2, prev_unstable_cycles, unstable_cycles" << prev_unstable_cycles << unstable_cycles << std::endl;
                                             }
+                                    } else
+                                        cycleN_count[c] = 0;
+                                }
+                                if (!line_start) std::cout << "." << std::endl;
+
+
+
+
+if (prev_unstable_cycles && !unstable_cycles) {
+std::cout << "set3, prev_unstable_cycles, unstable_cycles" << prev_unstable_cycles << unstable_cycles << std::endl;
+                                std::cout << "Periods:";
+                                for (unsigned c = 0; c < passes; c++) if (cycleN_period[c] != 0)
+                                    std::cout << " " << (c + 1) << ":" << cycleN_period[c];
+                                std::cout << "." << std::endl;
+// 18:  Periods: 2:3 6:9 12:9 16:3 18:18 20:3 24:9 30:9 34:3 36:36 38:3 42:9 48:9 52:3 54:67 56:3 60:79 66:82 72:85.
+// 20:  Periods: 10:2 20:2 30:2 40:2 50:2 60:2.
+// 24:  Periods: 24:4 48:4.
+// 36:  Periods: 12:2 24:2 36:36 48:2 60:2 72:89 84:2 96:113.
+// 60:  Periods: 2:8 12:2 24:2 36:2 48:2 60:3 72:2 84:2 96:2 108:2 120:3 132:2 144:2 156:2 168:2 180:3.
+// 360: Periods: 24:4 48:4 72:2 96:4 120:2 144:2 168:4 192:4 216:2 240:2 264:4 288:2 312:4 336:4 360:3 384:4.
+                                period_sums.assign(passes, 0);
+                                // odd groups, sum
+                                bool odd_group = false;
+                                for (unsigned c = 0; c < passes; c++) {
+                                    unsigned cp = cycleN_period[c];
+                                    if (cp & 1) {
+                                        cp--;
+                                        period_sums[cp] += (c + 1);
+                                        odd_group = true;
+                                    }
+                                }
+                                estimated = unsigned(-1);
+                                if (odd_group) {
+                                    std::cout << "Odd groups:";
+                                    for (unsigned c = 0; c < passes; c++) if (period_sums[c] != 0) {
+                                        std::cout << " " << (c + 1) << ":" << period_sums[c];
+                                        if (period_sums[c] < estimated) estimated = period_sums[c];
+                                    }
+                                    std::cout << ", minimal: " << estimated << std::endl;
+                                }
+
+                                // even groups, multiple of minimals?
+                                unsigned multiple = 0;
+                                for (unsigned g = 2; g <= passes; g = g + 2) { // even groups
+                                    period_group_minimals.assign(passes, 0); // reset minimals list
+                                    unsigned kmax = 0;
+                                    for (unsigned c = 0; c < passes; c++) {
+                                        if (cycleN_period[c] == g) { // same group
+                                            for (unsigned k = 0; k < kmax; k++)
+                                                if (((c + 1) % period_group_minimals[k]) == 0) goto group_minimal_present;
+                                            period_group_minimals[kmax] = c + 1; // new minimal
+                                            kmax++;
+                                            group_minimal_present: ;
+                                        }
+                                    }
+                                    if (kmax) {
+                                        std::cout << "Even group " << g << ", minimals:";
+                                        for (unsigned c = 0; c < kmax; c++) std::cout << " " << period_group_minimals[c];
+                                        unsigned m = MinimalMultiple(period_group_minimals, kmax - 1); // array[passes], index of last used element
+                                        if (m == unsigned(-1)) goto passes_checked; // error
+                                        std::cout << ", multiple: " << m << std::endl;
+                                        if (m > multiple) multiple = m;
+                                    }
+                                }
+                                estimated = std::min(estimated, std::max(multiple, max_cycle_multiple));
+                                //std::cout << "Estimated: " << estimated << std::endl;
+                                max_cycle_start = p1 - estimated - cycleN_count[estimated - 1];
+}
+
+
+
 
 //24  48  72  96  120 144 168 192 216 240 264 288 312 336 360 384 408 432 456 480 504 528 552 576 600 624 648 672 696 720 744 ... 1440
 //                        *1                          *2                          *3                          *4                          --------
@@ -647,82 +720,29 @@ wrong_cycle:                                ; //nop
 //                     .        .        .        .        .        .        .        .        .        *20      *20      .        *20      *20
 //                                                                                                                              *24
 //                                                                                                                                       *30
-                                        // count 1, count repeats, limit to multiple?
-                                        if (/* (cycleN_count[c] == 1) || */ ((cycleN_count[c] % c1) == 1)) { // cycle is started
+                                // updating cycle size only after cycle is stabilized
+                                prev_unstable_cycles = unstable_cycles; // 1 pass delay
+                                unstable_cycles = false;
+                                for (unsigned c = 0; c < passes; c++) {
+                                    if (cycleN_match[c]) {
+                                            // count 1?
+                                        if (/* (cycleN_count[c] == 1) || */ ((cycleN_count[c] % (c + 1)) == 1)) { // cycle is started
+                                            unsigned s_old = cycleN_period[c];
                                             unsigned s = p1 - cycleN_previous[c]; // start period
-                                            if ((cycleN_period[c] == 0) || (s < cycleN_period[c])) {
+                                            if ((s_old == 0) || (s < s_old)) {
+                                                if (s < s_old) {
+                                                unstable_cycles = true;
+                                                std::cout << "Stable." << std::endl;
+                                                }
                                                 cycleN_period[c] = s;
                                             }
                                             cycleN_previous[c] = p1;
                                         }
-
-                                    } else
-                                        cycleN_count[c] = 0;
-                                }
-                                if (!line_start) std::cout << "." << std::endl;
-
-                                prev_groups = both_groups; // 1 pass delay
-
-                                //std::cout << "Periods:";
-                                //for (unsigned c = 0; c < passes; c++) if (cycleN_period[c] != 0)
-                                //    std::cout << " " << (c + 1) << ":" << cycleN_period[c];
-                                //std::cout << "." << std::endl;
-// 18:  Periods: 2:3 6:9 12:9 16:3 18:18 20:3 24:9 30:9 34:3 36:36 38:3 42:9 48:9 52:3 54:67 56:3 60:79 66:82 72:85.
-// 20:  Periods: 10:2 20:2 30:2 40:2 50:2 60:2.
-// 24:  Periods: 24:4 48:4.
-// 36:  Periods: 12:2 24:2 36:36 48:2 60:2 72:89 84:2 96:113.
-// 60:  Periods: 2:8 12:2 24:2 36:2 48:2 60:3 72:2 84:2 96:2 108:2 120:3 132:2 144:2 156:2 168:2 180:3.
-// 360: Periods: 24:4 48:4 72:2 96:4 120:2 144:2 168:4 192:4 216:2 240:2 264:4 288:2 312:4 336:4 360:3 384:4.
-                                period_sums.assign(passes, 0);
-                                // odd groups, sum
-                                bool odd_group = false;
-                                for (unsigned c = 0; c < passes; c++) {
-                                    unsigned cp = cycleN_period[c];
-                                    if (cp & 1) {
-                                        cp--;
-                                        period_sums[cp] += (c + 1);
-                                        odd_group = true;
                                     }
                                 }
-                                estimated = unsigned(-1);
-                                if (odd_group) {
-                                    //std::cout << "Odd groups:";
-                                    for (unsigned c = 0; c < passes; c++) if (period_sums[c] != 0) {
-                                        //std::cout << " " << (c + 1) << ":" << period_sums[c];
-                                        if (period_sums[c] < estimated) estimated = period_sums[c];
-                                    }
-                                    //std::cout << ", minimal: " << estimated << std::endl;
-                                }
 
-                                // even groups, multiple of minimals?
-                                bool even_group = false;
-                                unsigned multiple = 0;
-                                for (unsigned g = 2; g <= passes; g = g + 2) { // even groups
-                                    period_group_minimals.assign(passes, 0); // reset minimals list
-                                    unsigned kmax = 0;
-                                    for (unsigned c = 0; c < passes; c++) {
-                                        if (cycleN_period[c] == g) { // same group
-                                            for (unsigned k = 0; k < kmax; k++)
-                                                if (((c + 1) % period_group_minimals[k]) == 0) goto group_minimal_present;
-                                            period_group_minimals[kmax] = c + 1; // new minimal
-                                            kmax++;
-                                            group_minimal_present: ;
-                                        }
-                                    }
-                                    if (kmax) {
-                                        //std::cout << "Even group " << g << ", minimals:";
-                                        //for (unsigned c = 0; c < kmax; c++) std::cout << " " << period_group_minimals[c];
-                                        unsigned m = MinimalMultiple(period_group_minimals, kmax - 1); // array[passes], index of last used element
-                                        if (m == unsigned(-1)) goto passes_checked; // error
-                                        //std::cout << ", multiple: " << m << std::endl;
-                                        if (m > multiple) multiple = m;
-                                        even_group = true;
-                                    }
-                                }
-                                both_groups = odd_group && even_group;
-                                estimated = std::min(estimated, std::max(multiple, max_cycle_multiple));
-                                //std::cout << "Estimated: " << estimated << std::endl;
-                                max_cycle_start = p1 - estimated - cycleN_count[estimated - 1];
+
+
 
                                 //std::cout << "Matched sample, referencing previous copy." << std::endl;
                                 zip_indices[p] = zip_indices[add_index];
@@ -749,7 +769,7 @@ sample_added:           ; //nop
                     std::cerr << "\nCan not open archive \"" << wstring2string(arg_string[2]) << "\"." << std::endl;
                 p++;
                 if (max_cycle > 0) {
-                    if (estimated < detect_threshold) estimated = detect_threshold;
+//                    if (estimated < detect_threshold) estimated = detect_threshold;
                     // passes = n*(n+1)/2
                     // k = n2/n1
                     // p2/p1 = k*(n1*k+1)/(n1+1) = n2*(n2+1)/n1/(n1+1)
