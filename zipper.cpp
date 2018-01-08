@@ -544,7 +544,7 @@ int main(int argc, char** argv) {
                                                 std::cout << "Compression cycling detected, " << dc << " archives. More passes should not be necessary." << std::endl;
                                                 if (!old_detection) {
                                                     is_full = true;
-//                                                    goto passes_checked;
+                                                    goto passes_checked;
                                                 }
                                             }
                                         }
@@ -583,8 +583,6 @@ int main(int argc, char** argv) {
                                         std::cout << ", ";
                                     std::cout << cycleN_count[c] << "/" << c1;
                                     // updating cycle starts and intervals arrays
-//                                      /* (cycleN_count[c] == 1) || */ /*
-//                                      v count 1?
                                     if ( (cycleN_count[c] % c1) == 1) { // cycle is started
                                         unsigned s = p1 - cycleN_start_previous[c]; // start period
                                         unsigned s_old = cycleN_start_period[c];
@@ -599,22 +597,8 @@ int main(int argc, char** argv) {
                             }
                             if (!line_start) std::cout << "." << std::endl;
 
-//                            if (unstable_cycles == true) std::cout << "Some cycle(s) changed size." << std::endl;
-
-//                            std::cout << "Periods:";
-  //                          for (unsigned c = 0; c < passes; c++) if (cycleN_start_period[c] != 0)
-    //                            std::cout << " " << (c + 1) << ":" << cycleN_start_period[c];
-      //                      std::cout << "." << std::endl;
-
-//                            std::cout << "Minimal cycle sizes (" << cycleNsizes_count << "):";
-  //                          for (unsigned c = 0; c < cycleNsizes_count; c++)
-    //                            std::cout << " " << cycleN_sizes[c];
-      //                      std::cout << "." << std::endl;
-
-                            // updating cycle_size only when it's not set or cycles are stable
+                            // calculating cycle size, updating cycle_size only when it's not set or cycles are stable
                             if (!cycle_size || (prev_unstable_cycles && !unstable_cycles)) {
-                                // calculating cycle size
-        //                        std::cout << "cycleNsizes_multiple: " << cycleNsizes_multiple << std::endl;
                                 period_sums.assign(passes, 0);
                                 // odd groups, sum
                                 bool odd_group = false;
@@ -627,14 +611,11 @@ int main(int argc, char** argv) {
                                     }
                                 }
                                 cycle_size = unsigned(-1);
-                                if (odd_group) {
-//                                    std::cout << "Odd groups:";
-                                    for (unsigned c = 0; c < passes; c++) if (period_sums[c] != 0) {
-  //                                      std::cout << " " << (c + 1) << ":" << period_sums[c];
-                                        if (period_sums[c] < cycle_size) cycle_size = period_sums[c];
+                                if (odd_group)
+                                    for (unsigned c = 0; c < passes; c++) {
+                                        unsigned s = period_sums[c];
+                                        if (s && (s < cycle_size)) cycle_size = s;
                                     }
-    //                                std::cout << ", minimal: " << cycle_size << std::endl;
-                                }
                                 // even groups, multiple of minimals?
                                 unsigned multiple = 0;
                                 for (unsigned g = 2; g <= passes; g = g + 2) { // even groups
@@ -650,10 +631,7 @@ int main(int argc, char** argv) {
                                         }
                                     }
                                     if (kmax) {
-//                                        std::cout << "Even group " << g << ", minimals:";
-  //                                      for (unsigned c = 0; c < kmax; c++) std::cout << " " << period_group_minimals[c];
                                         unsigned m = MinimalMultiple(period_group_minimals, kmax - 1); if (m == unsigned(-1)) goto passes_checked; // error
-    //                                    std::cout << ", multiple: " << m << std::endl;
                                         if (m > multiple) multiple = m;
                                     }
                                 }
@@ -688,10 +666,7 @@ int main(int argc, char** argv) {
                 p = p1; //p++;
                 if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold << "." << std::endl;
                 if (cycle_size > 0) {
-//                    if (cycle_size < detect_threshold) cycle_size = detect_threshold;
                     unsigned current_size = std::max(cycle_size, detect_threshold);
-                    std::cout << "p: " << p << ", cycle_start: " << cycle_start << ", cycle_size: " << cycle_size << ", detect_threshold: " << detect_threshold << std::endl; //k*CurrentSeconds-CurrentSeconds
-                    //current_size = int(std::floor(double(p - cycle_start) / cycle_size / 2)) * cycle_size + cycle_size;
                     current_size = int(std::floor(double(p - cycle_start) / current_size / 2)) * current_size + current_size;
                     unsigned tp = cycle_start + current_size * 2;
                     // passes = n*(n+1)/2
@@ -736,13 +711,17 @@ passes_checked:
                         arcname_out = arcname_out + L".of" + std::wstring(wchar_buf);
                     }
                     if (show_full) {
-                        if (old_detection) {
-                            swprintf((wchar_t*)&wchar_buf, wchar_buf_length, f.c_str(), match_counter);
-                            arcname_out = arcname_out + L".match" + (is_full ? std::wstring(wchar_buf) : L"-");
-                        } else {
-                            swprintf((wchar_t*)&wchar_buf, wchar_buf_length, f.c_str(), std::max(cycle_size, detect_threshold));
-                            arcname_out = arcname_out + L".cycle" + (is_full ? std::wstring(wchar_buf) : L"-");
-                        }
+                        if (is_full) {
+                            if (old_detection) {
+                                swprintf((wchar_t*)&wchar_buf, wchar_buf_length, f.c_str(), match_counter);
+                                arcname_out += L".match";
+                            } else {
+                                swprintf((wchar_t*)&wchar_buf, wchar_buf_length, f.c_str(), std::max(cycle_size, detect_threshold));
+                                arcname_out += L".cycle";
+                            }
+                            arcname_out += std::wstring(wchar_buf);
+                        } else
+                            if (old_detection) arcname_out += L".match-"; else arcname_out += L".cycle-";
                     }
                     arcname_out += zipExt;
                     std::wstring out_subdir = arcname_out.substr(0, wPath_length(arcname_out) - 1);
