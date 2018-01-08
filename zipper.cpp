@@ -583,7 +583,7 @@ int main(int argc, char** argv) {
                                         std::cout << ", ";
                                     std::cout << cycleN_count[c] << "/" << c1;
                                     // updating cycle starts and intervals arrays
-                                    if ( (cycleN_count[c] % c1) == 1) { // cycle is started
+                                    if ((cycleN_count[c] % c1) == 1) { // cycle is started
                                         unsigned s = p1 - cycleN_start_previous[c]; // start period
                                         unsigned s_old = cycleN_start_period[c];
                                         if ((s_old == 0) || (s < s_old)) { // set or reduce interval
@@ -721,7 +721,7 @@ passes_checked:
                             }
                             arcname_out += std::wstring(wchar_buf);
                         } else
-                            if (old_detection) arcname_out += L".match-"; else arcname_out += L".cycle-";
+                            arcname_out += (old_detection ? L".match-" : L".cycle-");
                     }
                     arcname_out += zipExt;
                     std::wstring out_subdir = arcname_out.substr(0, wPath_length(arcname_out) - 1);
