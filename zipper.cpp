@@ -689,7 +689,10 @@ int main(int argc, char** argv) {
                 if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold << "." << std::endl;
                 if (cycle_size > 0) {
 //                    if (cycle_size < detect_threshold) cycle_size = detect_threshold;
-                    unsigned current_size = int(std::floor(double(p - cycle_start) / cycle_size / 2)) * cycle_size + cycle_size;
+                    unsigned current_size = std::max(cycle_size, detect_threshold);
+                    std::cout << "p: " << p << ", cycle_start: " << cycle_start << ", cycle_size: " << cycle_size << ", detect_threshold: " << detect_threshold << std::endl; //k*CurrentSeconds-CurrentSeconds
+                    //current_size = int(std::floor(double(p - cycle_start) / cycle_size / 2)) * cycle_size + cycle_size;
+                    current_size = int(std::floor(double(p - cycle_start) / current_size / 2)) * current_size + current_size;
                     unsigned tp = cycle_start + current_size * 2;
                     // passes = n*(n+1)/2
                     // p2/p1 = n2*(n2+1)/2/n1*(n1+1)*2 = n2*(n2+1)/n1/(n1+1)
@@ -737,7 +740,7 @@ passes_checked:
                             swprintf((wchar_t*)&wchar_buf, wchar_buf_length, f.c_str(), match_counter);
                             arcname_out = arcname_out + L".match" + (is_full ? std::wstring(wchar_buf) : L"-");
                         } else {
-                            swprintf((wchar_t*)&wchar_buf, wchar_buf_length, f.c_str(), cycle_size);
+                            swprintf((wchar_t*)&wchar_buf, wchar_buf_length, f.c_str(), std::max(cycle_size, detect_threshold));
                             arcname_out = arcname_out + L".cycle" + (is_full ? std::wstring(wchar_buf) : L"-");
                         }
                     }
