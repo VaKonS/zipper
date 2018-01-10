@@ -67,7 +67,6 @@ unsigned pass_counter;
 bool matched_once, matched_pass;
 unsigned match_counter;
 unsigned cycle_start, cycle_size, cycleNsizes_count, cycleNsizes_multiple;
-bool unstable_cycles, prev_unstable_cycles;
 size_t mem_limit, mem_use;
 time_t StartTime;
 std::wstring zipTempDir, zipInputDir, zipOutputDir, arcname_out, mmt, redefine, zipSingle, zip_cmd;
@@ -85,8 +84,9 @@ wchar_t wchar_buf[32768];
 const size_t wchar_buf_length = sizeof(wchar_buf) / sizeof(wchar_t);
 std::vector<std::vector<char>> zip_storage;
 std::vector<int> zip_indices; // zip_storage indices
-std::vector<bool> cycleN_match;
-std::vector<unsigned> cycleN_count, cycleN_sizes, cycleN_start_previous, cycleN_start_period, period_sums, period_group_minimals;
+std::vector<bool> cycleN_match, unstable_cycle;
+std::vector<unsigned> cycleN_count, cycleN_sizes, cycleN_start, cycleN_end, cycleN_start_previous, period_sums, period_group_minimals;
+std::vector<int> cycleN_prev_period, cycleN_min_period;
 
 
 // ----------------------------------------------------------
@@ -96,9 +96,13 @@ void resizeArraysToPasses() {
     cycleN_count.resize(passes);
     cycleN_sizes.resize(passes);
     cycleN_start_previous.resize(passes);
-    cycleN_start_period.resize(passes);
+    cycleN_min_period.resize(passes);
     period_sums.resize(passes);
     period_group_minimals.resize(passes);
+    cycleN_prev_period.resize(passes);
+    unstable_cycle.resize(passes);
+    cycleN_end.resize(passes);
+    cycleN_start.resize(passes);
 }
 
 void Close_File(HANDLE * fh) {
@@ -449,10 +453,11 @@ int main(int argc, char** argv) {
             cycleN_sizes.assign(passes, 0); // array of minimal cycle sizes
             cycleNsizes_count = 0;
             cycleNsizes_multiple = 0;
-            unstable_cycles = false; // flags of change of cycles restart period (to update estimated size only when cycles are stable)
-            prev_unstable_cycles = false;
             cycleN_start_previous.assign(passes, 0); // previous cycle start
-            cycleN_start_period.assign(passes, 0); // interval of cycle starts
+            cycleN_min_period.assign(passes, 0); // minimal intervals of cycle starts, for sizes prediction
+            cycleN_prev_period.assign(passes, 0); // previous intervals, for cycling end detection
+            cycleN_end.assign(passes, 0); // 0-based ends
+            cycleN_start.assign(passes, 0); //1-based starts
             unsigned p = begin - 1;
             while (p < passes) {
                 unsigned p1 = p + 1; // 1-based counter
@@ -544,7 +549,7 @@ int main(int argc, char** argv) {
                                                 std::cout << "Compression cycling detected, " << dc << " archives. More passes should not be necessary." << std::endl;
                                                 if (!old_detection) {
                                                     is_full = true;
-                                                    goto passes_checked;
+//                                                    goto passes_checked;
                                                 }
                                             }
                                         }
@@ -563,8 +568,7 @@ int main(int argc, char** argv) {
                         if (add_index != -1) {
                             // filling cycle sizes array, displaying sizes, counting continuous cycles
                             bool line_start = true;
-                            prev_unstable_cycles = unstable_cycles; // 1 pass delay
-                            unstable_cycles = false;
+                            unstable_cycle.assign(passes, false); // flags of cycles change (to update size only when cycles are stable)
                             for (unsigned c = 0; c < passes; c++) {
                                 if (cycleN_match[c]) {
                                     unsigned c1 = c + 1; // 1-based size of current cycle
@@ -582,14 +586,37 @@ int main(int argc, char** argv) {
                                     } else
                                         std::cout << ", ";
                                     std::cout << cycleN_count[c] << "/" << c1;
-                                    // updating cycle starts and intervals arrays
-                                    if ((cycleN_count[c] % c1) == 1) { // cycle is started
-                                        unsigned s = p1 - cycleN_start_previous[c]; // start period
-                                        unsigned s_old = cycleN_start_period[c];
-                                        if ((s_old == 0) || (s < s_old)) { // set or reduce interval
-                                            cycleN_start_period[c] = s;
-                                            if (s < s_old) unstable_cycles = true;
+                                    // updating cycles
+                                    if ((cycleN_count[c] == 1) || ((cycleN_count[c] % c1) == 1)) { // cycle is started
+                                        int s = p1 - cycleN_start_previous[c]; // current start period
+                                        int s_min_old = cycleN_min_period[c];
+                                        int s_old = cycleN_prev_period[c];
+                                        bool u = false;
+                                        if ((s_min_old <= 0) || (s < s_min_old)) { // set or reduce minimal interval
+                                            u = true;
+                                            if (!s_min_old) // set 1st time (start)
+                                                cycleN_min_period[c] = -s;
+                                            else // set 2nd time (minimal interval)
+                                                cycleN_min_period[c] = s;
                                         }
+                                        if (s > s_old) { // interval is changing, cycling is not finished
+                                            u = true;
+                                            if (!s_old) // set 1st time (start)
+                                                cycleN_prev_period[c] = -s;
+                                            else  // set 2nd time (interval)
+                                                cycleN_prev_period[c] = s;
+                                        }
+                                        unsigned fs = cycleN_start[c];
+                                        if (!fs) {
+                                            fs = p1 - c1;
+                                            cycleN_start[c] = fs;
+                                        }
+                                        unsigned le = p1 - fs;
+                                        if (!cycleN_end[c] || (le % c1)) {
+                                            cycleN_end[c] = p;
+                                            cycleN_start[c] = p1 - c1;
+                                        }
+                                        unstable_cycle[c] = u;
                                         cycleN_start_previous[c] = p1;
                                     }
                                 } else
@@ -597,49 +624,113 @@ int main(int argc, char** argv) {
                             }
                             if (!line_start) std::cout << "." << std::endl;
 
-                            // calculating cycle size, updating cycle_size only when it's not set or cycles are stable
-                            if (!cycle_size || (prev_unstable_cycles && !unstable_cycles)) {
-                                period_sums.assign(passes, 0);
-                                // odd groups, sum
-                                bool odd_group = false;
-                                for (unsigned c = 0; c < passes; c++) {
-                                    unsigned cp = cycleN_start_period[c];
-                                    if (cp & 1) {
-                                        cp--;
-                                        period_sums[cp] += (c + 1);
-                                        odd_group = true;
-                                    }
-                                }
-                                cycle_size = unsigned(-1);
-                                if (odd_group)
-                                    for (unsigned c = 0; c < passes; c++) {
-                                        unsigned s = period_sums[c];
-                                        if (s && (s < cycle_size)) cycle_size = s;
-                                    }
-                                // even groups, multiple of minimals?
-                                unsigned multiple = 0;
-                                for (unsigned g = 2; g <= passes; g = g + 2) { // even groups
-                                    period_group_minimals.assign(passes, 0); // reset minimals list
-                                    unsigned kmax = 0;
-                                    for (unsigned c = 0; c < passes; c++) {
-                                        if (cycleN_start_period[c] == g) { // same group
-                                            for (unsigned k = 0; k < kmax; k++)
-                                                if (((c + 1) % period_group_minimals[k]) == 0) goto group_minimal_present;
-                                            period_group_minimals[kmax] = c + 1; // new minimal
-                                            kmax++;
-                                            group_minimal_present: ;
-                                        }
-                                    }
-                                    if (kmax) {
-                                        unsigned m = MinimalMultiple(period_group_minimals, kmax - 1); if (m == unsigned(-1)) goto passes_checked; // error
-                                        if (m > multiple) multiple = m;
-                                    }
-                                }
-                                cycle_size = std::min(cycle_size, std::max(multiple, cycleNsizes_multiple));
-                            }
+//*
+std::cout << "Unstable_cycles:";
+for (unsigned c = 0; c < passes; c++) if (unstable_cycle[c])
+    std::cout << " " << (c + 1);
+std::cout << "." << std::endl;
+std::cout << "Starts:";
+for (unsigned c = 0; c < passes; c++) if (cycleN_start[c])
+    std::cout << " " << (c + 1) << ":" << (cycleN_start[c] - 1);
+std::cout << "." << std::endl;
+std::cout << "Ends:";
+for (unsigned c = 0; c < passes; c++) if (cycleN_end[c])
+    std::cout << " " << (c + 1) << ":" << cycleN_end[c];
+std::cout << "." << std::endl;
+std::cout << "Minimal cycles:";
+for (unsigned c = 0; c < cycleNsizes_count; c++) if (cycleN_sizes[c])
+    std::cout << " " << cycleN_sizes[c];
+std::cout << "." << std::endl;
+std::cout << "Minimal cycles multiple: " << cycleNsizes_multiple << std::endl;
+std::cout << "Minimal periods:";
+for (unsigned c = 0; c < passes; c++) if (cycleN_min_period[c])
+    std::cout << " " << (c + 1) << ":" << cycleN_min_period[c];
+std::cout << "." << std::endl;
+std::cout << "Maximal periods:";
+for (unsigned c = 0; c < passes; c++) if (cycleN_prev_period[c])
+    std::cout << " " << (c + 1) << ":" << cycleN_prev_period[c];
+std::cout << "." << std::endl;
+std::cout << "cycle_size: " << cycle_size << std::endl;
+//*/
 
-                            // updating cycle start
+                            // evaluating cycle size
+                            // odd groups, sum
+                            period_sums.assign(passes, 0);
+                            bool odd_group = false;
+                            for (unsigned c = 0; c < passes; c++) {
+                                int cp = cycleN_min_period[c];
+                                if ((cp > 0) && (cp & 1)) {
+                                    cp--;
+                                    period_sums[cp] += (c + 1);
+                                    odd_group = true;
+                                }
+                            }
+                            unsigned estimated_size = unsigned(-1);
+                            if (odd_group)
+                                for (unsigned c = 0; c < passes; c++) {
+                                    unsigned s = period_sums[c];
+                                    if (s && (s < estimated_size)) estimated_size = s;
+                                }
+
+//*
+if (odd_group) {
+std::cout << "Odd groups:";
+for (unsigned c = 0; c < passes; c++) if (period_sums[c])
+    std::cout << " " << (c + 1) << ":" << period_sums[c];
+std::cout << ", minimal: " << estimated_size << "." << std::endl;
+}
+//*/
+
+                            // even groups, multiple of minimals?
+                            unsigned multiple = 0;
+                            for (unsigned g = 2; g <= passes; g = g + 2) { // even groups
+                                period_group_minimals.assign(passes, 0); // reset minimals list
+                                unsigned kmax = 0;
+                                for (unsigned c = 0; c < passes; c++) {
+                                    if (cycleN_min_period[c] == int(g)) { // same group, negative starts are ignored
+                                        for (unsigned k = 0; k < kmax; k++)
+                                            if (((c + 1) % period_group_minimals[k]) == 0) goto group_minimal_present;
+                                        period_group_minimals[kmax] = c + 1; // new minimal
+                                        kmax++;
+                                       group_minimal_present: ;
+                                    }
+                                }
+                                if (kmax) {
+                                    unsigned m = MinimalMultiple(period_group_minimals, kmax - 1); if (m == unsigned(-1)) goto passes_checked; // error
+                                    if (m > multiple) multiple = m;
+
+//*
+std::cout << "Even group " << g << ", minimals:";
+for (unsigned c = 0; c < kmax; c++)
+    std::cout << " " << period_group_minimals[c];
+std::cout << ", multiple: " << m << std::endl;
+//*/
+
+                                }
+                            }
+                            estimated_size = std::min(estimated_size, std::max(multiple, cycleNsizes_multiple));
+
+//*
+std::cout << "estimated cycle: " << estimated_size << ", start " << int(cycleN_end[estimated_size - 1] - estimated_size) << ", end " << cycleN_end[estimated_size - 1] << ", passes " << (cycleN_end[estimated_size - 1] + estimated_size) << std::endl;
+//*/
+
+                            // updating cycle only when it's not set or cycles are stable
+                            if (!cycle_size || (estimated_size && (estimated_size <= passes) && !unstable_cycle[estimated_size - 1])) {
+
+//*
+if (cycle_size)
+    std::cout << "Stabilized cycle is set." << std::endl;
+else
+    std::cout << "Cycle is set." << std::endl;
+//*/
+
+                                cycle_size = estimated_size;
+                            }
                             cycle_start = p1 - cycle_size - cycleN_count[cycle_size - 1];
+
+//*
+std::cout << "cycle_start: " << cycle_start << ", cycle_size: " << cycle_size << "." << std::endl;
+//*/
 
                             //std::cout << "Matched sample, referencing previous copy." << std::endl;
                             zip_indices[p] = zip_indices[add_index];
@@ -666,8 +757,8 @@ int main(int argc, char** argv) {
                 p = p1; //p++;
                 if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold << "." << std::endl;
                 if (cycle_size > 0) {
-                    unsigned current_size = std::max(cycle_size, detect_threshold);
-                    current_size = int(std::floor(double(p - cycle_start) / current_size / 2)) * current_size + current_size;
+                    unsigned current_size = cycle_size; //current_size = std::max(cycle_size, detect_threshold);
+                    //current_size = int(std::floor(double(p - cycle_start) / current_size / 2)) * current_size + current_size;
                     unsigned tp = cycle_start + current_size * 2;
                     // passes = n*(n+1)/2
                     // p2/p1 = n2*(n2+1)/2/n1*(n1+1)*2 = n2*(n2+1)/n1/(n1+1)
