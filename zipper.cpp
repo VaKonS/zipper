@@ -538,6 +538,7 @@ int main(int argc, char** argv) {
                                                 std::cout << "Compression cycling detected, " << dc << " archives. More passes should not be necessary." << std::endl;
                                                 if (!old_detection) {
                                                     is_full = true;
+                                                    if (!cycle_size) cycle_size = 1;
 //                                                    goto passes_checked;
                                                 }
                                             }
