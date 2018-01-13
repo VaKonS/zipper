@@ -686,13 +686,25 @@ std::cout << ", minimal: " << estimated_size << "." << std::endl;
                             for (unsigned g = 2; g <= passes; g = g + 2) { // even groups
                                 period_group_minimals.assign(passes, 0); // reset minimals list
                                 unsigned kmax = 0;
+                                unsigned group_start = passes + 1; // impossible value, cycle should not start after passes
+                                for (unsigned c = 0; c < passes; c++)
+                                    if (cycleN_min_period[c] == int(g)) {
+                                        group_start = cycleN_start[c];
+                                        break;
+                                    }
                                 for (unsigned c = 0; c < passes; c++) {
-                                    if (cycleN_min_period[c] == int(g)) { // same group, negative starts are ignored
-                                        for (unsigned k = 0; k < kmax; k++)
-                                            if (((c + 1) % period_group_minimals[k]) == 0) goto group_minimal_present;
-                                        period_group_minimals[kmax] = c + 1; // new minimal
-                                        kmax++;
-                                       group_minimal_present: ;
+                                    if (cycleN_start[c] == group_start)
+                                    if (cycleN_min_period[c] > 0) { // negative starts are ignored
+                                        unsigned p1 = cycleN_min_period[c];
+                                        unsigned p2 = g;
+                                        if (!(p1 % p2) || !(p2 % p1)) { // same group
+                                            unsigned c1 = c + 1;
+                                            for (unsigned k = 0; k < kmax; k++)
+                                                if ((c1 % period_group_minimals[k]) == 0) goto group_minimal_present;
+                                            period_group_minimals[kmax] = c1; // new minimal
+                                            kmax++;
+                                           group_minimal_present: ;
+                                        }
                                     }
                                 }
                                 if (kmax) {
@@ -729,7 +741,7 @@ else
                             cycle_start = p1 - cycle_size - cycleN_count[cycle_size - 1];
 
 //*
-std::cout << "cycle_start: " << cycle_start << ", cycle_size: " << cycle_size << "." << std::endl;
+std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_size << "." << std::endl;
 //*/
 
                             //std::cout << "Matched sample, referencing previous copy." << std::endl;
