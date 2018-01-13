@@ -576,14 +576,13 @@ int main(int argc, char** argv) {
                                     } else
                                         std::cout << ", ";
                                     std::cout << cm << "/" << c1;
-                                    // updating cycle starts
-                                    if ((cm == 1) || ((cm % c1) == 1)) { // cycle is started
-                                        unsigned cs = cycleN_start[c];
-                                        if (!cs || ((p1 - cs) % c1)) cycleN_start[c] = p1 - c1;
-                                    }
+                                    // updating cycles starts
+                                    if ((cm == 1) || ((cm % c1) == 1)) if (!cycleN_start[c]) cycleN_start[c] = p1 - c1;
                                     if (c1 == cycle_max_size) cycle_start = cycleN_start[c] - 1;
-                                } else
+                                } else {
                                     cycleN_count[c] = 0;
+                                    cycleN_start[c] = 0;
+                                }
                             }
                             if (!line_start) std::cout << "." << std::endl;
                             if (!old_detection) if (detect_threshold_current < cycle_size) detect_threshold_current = cycle_size;
@@ -603,14 +602,16 @@ std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_si
                             //std::cout << "Matched sample, referencing previous copy." << std::endl;
                             zip_indices[p] = zip_indices[add_index];
                         } else { // archive does not match any previous sample
+                            // updating estimated number of passes
+                            if (cycle_size) {
+                                unsigned cs = cycleN_start[cycle_max_size - 1];
+                                if (cs) cycle_start = cs - 1;
+                            } else
+                                cycle_start = p;
                             // resetting match counters
                             match_counter = 0;
                             cycleN_count.assign(passes, 0);
-                            // updating estimated number of passes
-                            if (cycle_size)
-                                cycle_start = cycleN_start[cycle_max_size - 1] - 1;
-                            else
-                                cycle_start = p;
+                            cycleN_start.assign(passes, 0);
                             // adding archive to samples storage
                             zip_indices[p] = zip_storage.size();
                             zip_storage.emplace_back(); // empty sample
