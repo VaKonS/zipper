@@ -624,19 +624,23 @@ std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_si
                         Close_File(&file_check);
                 } else
                     std::cerr << "\nCan not open archive \"" << wstring2string(arg_string[2]) << "\"." << std::endl;
-                p = p1; //p++;
                 if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold_current << "." << std::endl;
                 if (cycle_size > 0) {
-                    unsigned current_size = cycle_size; //current_size = std::max(cycle_size, detect_threshold_current);
-                    //current_size = int(std::floor(double(p - cycle_start) / current_size / 2)) * current_size + current_size;
+                    unsigned current_size; //current_size = std::max(cycle_size, detect_threshold_current);
+                    if (!match_counter || (p1 < (cycle_start + detect_threshold_current * 2)))
+                        current_size = detect_threshold_current;
+                    else
+                        current_size = cycle_size;
+                    current_size = int(std::floor(double(p1 - cycle_start) / current_size / 2)) * current_size + current_size;
                     unsigned tp = cycle_start + current_size * 2;
                     // passes = n*(n+1)/2
                     // p2/p1 = n2*(n2+1)/2/n1*(n1+1)*2 = n2*(n2+1)/n1/(n1+1)
-                    double k = static_cast<double>(tp) * (tp + 1) / static_cast<double>(p) / p1;
+                    double k = static_cast<double>(tp) * (tp + 1) / p1 / (p1 + 1);
                     //std::cout << "Time: " << dhms(difftime(time(NULL), StartTime)) << "." << std::endl;
-                    std::cout << "Estimated cycle: " << current_size << ", total passes: " << tp
+                    std::cout << "Estimated cycle: " << cycle_size << ", total passes: " << tp
                               << ".\nTime left: " << dhms((k - 1) * difftime(time(NULL), StartTime)) << "." << std::endl; //k*CurrentSeconds-CurrentSeconds
                 }
+                p = p1; //p++;
                 if (auto_passes and (p >= passes)) {
                     unsigned prev_passes = passes;
                     passes = (passes + cycle_start + cycle_size) * 3;
