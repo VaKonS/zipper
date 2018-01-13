@@ -624,8 +624,10 @@ std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_si
                         }
                     } else
                         Close_File(&file_check);
-                } else
+                } else {
                     std::cerr << "\nCan not open archive \"" << wstring2string(arg_string[2]) << "\"." << std::endl;
+                    break;
+                }
                 if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold_current << "." << std::endl;
                 if (cycle_size > 0) {
                     unsigned current_size; //current_size = std::max(cycle_size, detect_threshold_current);
