@@ -539,7 +539,7 @@ int main(int argc, char** argv) {
                                                 if (!old_detection) {
                                                     is_full = true;
                                                     if (!cycle_size) cycle_size = 1;
-//                                                    goto passes_checked;
+                                                    goto passes_checked;
                                                 }
                                             }
                                         }
@@ -588,7 +588,7 @@ int main(int argc, char** argv) {
                             if (!line_start) std::cout << "." << std::endl;
                             if (!old_detection) if (detect_threshold_current < cycle_size) detect_threshold_current = cycle_size;
 
-//*
+/*
 std::cout << "Minimal cycles:";
 for (unsigned c = 0; c < cycleNsizes_count; c++) if (cycleN_sizes[c])
     std::cout << " " << cycleN_sizes[c];
