@@ -60,7 +60,7 @@ MEMORYSTATUS mem_stat = {
 
 
 // uninitialized data (declared here to free stack)
-bool show_passes, show_full, is_full, old_detection;
+bool show_passes, show_full, is_full, old_detection, debug_output;
 unsigned passes, begin, detect_threshold, detect_threshold_current;
 unsigned minimal_zip_length, minimal_zip_passes;
 unsigned pass_counter;
@@ -253,7 +253,7 @@ int main(int argc, char** argv) {
     arg_string[0] = wTrailSlash(std::wstring(wchar_buf)) + SevenZipSubPath;
 
     // definition of command line arguments   abcdefghijklmnopqrstuvwxyz
-    //                                        abcd.f..i..lmnop.rst......
+    //                                        abcdef.hi..lmnop.rst......
     TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.6");
 
     TCLAP::ValueArg<std::string> cmdInputDir("i", "input-mask",
@@ -312,6 +312,10 @@ int main(int argc, char** argv) {
                     "Fully redefine command line.\nPass arguments as %c (7z.exe), \\\"%i\\\" (file), \\\"%o\\\" (archive), %p (passes).\nUse %% to pass % character before c, i, o, p without substitution.", false,
                     "", "string", cmd);
 
+    TCLAP::ValueArg<bool> cmdDebug("e", "debug-output",
+                    "Show more variables. [0 = no]", false,
+                    false, "boolean", cmd);
+
     // parse command line arguments
     try {
         cmd.parse(argc, argv);
@@ -334,6 +338,7 @@ int main(int argc, char** argv) {
     show_passes        = cmdShowPasses.getValue();
     show_full          = cmdShowFull.getValue();
     old_detection      = cmdOld.getValue();
+    debug_output       = cmdDebug.getValue();
     mem_limit          = std::max(0, cmdMemLimit.getValue()) << 20;
     passes             = std::max(0, cmdPasses.getValue());
     detect_threshold   = std::max(unsigned(1), std::min(unsigned(cmdDetect.getValue()), (passes > 0)?passes:unsigned(-1))); // limit to 1...passes
@@ -586,8 +591,7 @@ int main(int argc, char** argv) {
                             }
                             if (!line_start) std::cout << "." << std::endl;
                             if (!old_detection) if (detect_threshold_current < cycle_size) detect_threshold_current = cycle_size;
-
-/*
+if (debug_output) {
 std::cout << "Minimal cycles:";
 for (unsigned c = 0; c < cycleNsizes_count; c++) if (cycleN_sizes[c])
     std::cout << " " << cycleN_sizes[c];
@@ -597,8 +601,7 @@ for (unsigned c = 0; c < passes; c++) if (cycleN_start[c])
     std::cout << " " << (c + 1) << ":" << (cycleN_start[c] - 1);
 std::cout << "." << std::endl;
 std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_size << ", cycle_end: " << (cycle_start + cycle_size) << ", passes: " << (cycle_start + cycle_size * 2) << "." << std::endl;
-//*/
-
+}
                             //std::cout << "Matched sample, referencing previous copy." << std::endl;
                             zip_indices[p] = zip_indices[add_index];
                         } else { // archive does not match any previous sample
