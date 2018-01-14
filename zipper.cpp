@@ -232,6 +232,8 @@ std::string dhms(double s) {
 
 std::string papl(unsigned n) {return (n == 1) ? " pass" : " passes";}
 std::string bypl(unsigned n) {return (n == 1) ? "byte" : "bytes";}
+std::string arpl(unsigned n) {return (n == 1) ? " archive":" archives";}
+
 
 int main(int argc, char** argv) {
 
@@ -517,6 +519,7 @@ int main(int argc, char** argv) {
                         int add_index = -1;
                         cycleN_match.assign(passes, false);
                         matched_pass = false;
+                        unsigned full_counter = 0;
                         for (int c = p - 1; c >= 0; c--) {
                             if (zip_indices[c] != -1) { // for skipped passes
                                 if (zip_storage[zip_indices[c]].size() == static_cast<size_t>(zip_length)) {
@@ -529,35 +532,29 @@ int main(int argc, char** argv) {
                                         }
                                         unsigned tcs = p - c; // cycle size
                                         cycleN_match[tcs - 1] = true;
-                                        if (tcs >= detect_threshold_current) {
-                                            int tcb = c - tcs + 1; // 1st match already found, cycle start + 1
-                                            if (tcb >= 0) {
-                                                unsigned dc = 1;
-                                                for (int d = tcb; d < c; d++) {
-                                                    int r  = zip_indices[d];       if (r  == -1) goto wrong_cycle; // skipped pass
-                                                    int r1 = zip_indices[d + tcs]; if (r1 == -1) goto wrong_cycle;
-                                                    if (zip_storage[r].size() != zip_storage[r1].size()) goto wrong_cycle;
-                                                    if (memcmp(zip_storage[r].data(), zip_storage[r1].data(), zip_storage[r].size()) != 0) goto wrong_cycle;
-                                                    dc++;
-                                                }
-                                                std::cout << "Compression cycling detected, " << dc << " archives. More passes should not be necessary." << std::endl;
-                                                if (!old_detection) {
-                                                    is_full = true;
-                                                    if (!cycle_size) cycle_size = 1;
-                                                    goto passes_checked;
-                                                }
+                                        int tcb = c - tcs + 1; // 1st match already found, cycle start + 1
+                                        if (tcb >= 0) {
+                                            unsigned dc = 1;
+                                            for (int d = tcb; d < c; d++) {
+                                                int r  = zip_indices[d];       if (r  == -1) goto wrong_cycle; // skipped pass
+                                                int r1 = zip_indices[d + tcs]; if (r1 == -1) goto wrong_cycle;
+                                                if (zip_storage[r].size() != zip_storage[r1].size()) goto wrong_cycle;
+                                                if (memcmp(zip_storage[r].data(), zip_storage[r1].data(), zip_storage[r].size()) != 0) goto wrong_cycle;
+                                                dc++;
                                             }
-                                        }
-                                           wrong_cycle:
-                                            if ((old_detection) && (match_counter >= detect_threshold)) {
-                                            std::cout << "Matched archives: " << match_counter << "/" << detect_threshold << ". Search complete." << std::endl;
-                                            is_full = true;
-                                            goto passes_checked;
-                                        }
+                                            if (!full_counter) {
+                                                std::cout << "Full cycle(s): ";
+                                            } else
+                                                std::cout << ", ";
+                                            full_counter = dc;
+                                            std::cout << full_counter;
+                                           wrong_cycle: ;
+                                        } // cycle possible
                                     } // data matched
                                 } // size matched
                             } // pass not skipped
                         }
+                        if (full_counter) std::cout << arpl(full_counter) << "." << std::endl;
 
 // calculating number of passes
                         if (add_index != -1) {
@@ -590,7 +587,6 @@ int main(int argc, char** argv) {
                                 }
                             }
                             if (!line_start) std::cout << "." << std::endl;
-                            if (!old_detection) if (detect_threshold_current < cycle_size) detect_threshold_current = cycle_size;
 if (debug_output) {
 std::cout << "Minimal cycles:";
 for (unsigned c = 0; c < cycleNsizes_count; c++) if (cycleN_sizes[c])
@@ -602,6 +598,19 @@ for (unsigned c = 0; c < passes; c++) if (cycleN_start[c])
 std::cout << "." << std::endl;
 std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_size << ", cycle_end: " << (cycle_start + cycle_size) << ", passes: " << (cycle_start + cycle_size * 2) << "." << std::endl;
 }
+                            if (!old_detection) {
+                                if (detect_threshold_current < cycle_size) detect_threshold_current = cycle_size;
+                                if ((detect_threshold_current <= passes) && (cycleN_count[detect_threshold_current - 1] >= detect_threshold_current)) {
+                                    std::cout << "Required " << detect_threshold_current << arpl(detect_threshold_current) << " matched. Search complete." << std::endl;
+                                    is_full = true;
+                                    goto passes_checked;
+                                }
+                            } else if (match_counter >= detect_threshold) {
+                                std::cout << "Matched" << arpl(match_counter) << ": " << match_counter << "/" << detect_threshold << ". Search complete." << std::endl;
+                                is_full = true;
+                                goto passes_checked;
+                            }
+
                             //std::cout << "Matched sample, referencing previous copy." << std::endl;
                             zip_indices[p] = zip_indices[add_index];
                         } else { // archive does not match any previous sample
