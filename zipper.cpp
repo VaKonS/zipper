@@ -580,6 +580,14 @@ int main(int argc, char** argv) {
                                         std::cout << ", ";
                                     std::cout << cm << "/" << c1;
                                     // updating cycles' starts
+//1	8	                                                                                                                                                                                   
+//24	  20 24 32 36 44 48 56 60 68    72             80       84             92       96             104       108             116       120                      128          132               
+//48		      20 24 32 36 44    48             56       60             68       72              80        84              92        96                      104          108               
+//72		                  20 23 23 23 27 29 31 31 31 35 35 35 39 41 43 43 43 47 47 47 51 53 55  55 55 59  59 59 63 65 67  67 67 71  71 71    75    77    79  79 79    83  83 83    87      
+//96		                                                               20       24              32        36              44        48                       56           60               
+//120		                                                                                                                  20        24    26    28    30     32    34     36    38    40   
+//...                                                                                                                                                                                              
+//360                                                                                                                                                                                            23
                                     if ((cm == 1) || ((cm % c1) == 1)) {
                                         int cs = cycleN_start[c];
                                         int ns = p1 - c1;
@@ -623,7 +631,7 @@ if (debug_output) std::cout << "+" << cycle_start;
                                     }
                                     if (c1 == cycle_size) { // estimated match, direct start correction
                                         cycle_start = p1 - c1 - cm;
-                                        cycleN_start[c] = cycle_start;
+                                        cycleN_start[c] = cycle_start + 1;
 if (debug_output) std::cout << "=" << cycle_start;
                                     }
                                 } else
