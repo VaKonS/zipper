@@ -580,14 +580,6 @@ int main(int argc, char** argv) {
                                         std::cout << ", ";
                                     std::cout << cm << "/" << c1;
                                     // updating cycles' starts
-//1	8	                                                                                                                                                                                   
-//24	  20 24 32 36 44 48 56 60 68    72             80       84             92       96             104       108             116       120                      128          132               
-//48		      20 24 32 36 44    48             56       60             68       72              80        84              92        96                      104          108               
-//72		                  20 23 23 23 27 29 31 31 31 35 35 35 39 41 43 43 43 47 47 47 51 53 55  55 55 59  59 59 63 65 67  67 67 71  71 71    75    77    79  79 79    83  83 83    87      
-//96		                                                               20       24              32        36              44        48                       56           60               
-//120		                                                                                                                  20        24    26    28    30     32    34     36    38    40   
-//...                                                                                                                                                                                              
-//360                                                                                                                                                                                            23
                                     if ((cm == 1) || ((cm % c1) == 1)) {
                                         int cs = cycleN_start[c];
                                         int ns = p1 - c1;
@@ -648,7 +640,7 @@ for (unsigned c = 0; c < cycleNsizes_count; c++) if (cycleN_sizes[c])
 std::cout << ", cycle_max_size: " << cycle_max_size << "." << std::endl;
 std::cout << "Cycle starts:";
 for (unsigned c = 0; c < passes; c++) if (cycleN_start[c])
-    std::cout << " " << (c + 1) << ":" << (cycleN_start[c] - 1);
+    std::cout << " " << (c + 1) << ":" << (cycleN_start[c] - ((cycleN_start[c] > 0)?1:-1));
 std::cout << "." << std::endl;
 std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_size << ", cycle_end: " << (cycle_start + cycle_size) << ", passes: " << (cycle_start + cycle_size * 2) << "." << std::endl;
 }
