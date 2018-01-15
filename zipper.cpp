@@ -85,7 +85,8 @@ const size_t wchar_buf_length = sizeof(wchar_buf) / sizeof(wchar_t);
 std::vector<std::vector<char>> zip_storage;
 std::vector<int> zip_indices; // zip_storage indices
 std::vector<bool> cycleN_match;
-std::vector<unsigned> cycleN_count, cycleN_sizes, cycleN_start;
+std::vector<unsigned> cycleN_count, cycleN_sizes;
+std::vector<int> cycleN_start;
 
 
 // ----------------------------------------------------------
@@ -442,7 +443,7 @@ int main(int argc, char** argv) {
             mem_use = 0;
             cycleN_count.assign(passes, 0); // continuous matches counters
             cycleN_sizes.assign(passes, 0); // array of minimal cycle sizes
-            cycleN_start.assign(passes, 0); // 1-based array of cycle starts
+            cycleN_start.assign(passes, 0); // 1-based array of cycle starts, negative for the 1st time
             cycleNsizes_count = 0;
             is_full = false;
             detect_threshold_current = detect_threshold;
@@ -564,8 +565,8 @@ int main(int argc, char** argv) {
                                 if (cycleN_match[c]) {
                                     unsigned c1 = c + 1; // 1-based size of current cycle
                                     unsigned cm = cycleN_count[c] + 1; cycleN_count[c] = cm; // matches of current cycle
+                                    // updating minimal cycle sizes array
                                     if (line_start) {
-                                        // updating minimal cycle sizes array
                                         for (unsigned k = 0; k < cycleNsizes_count; k++)
                                             if (cycleN_sizes[k] == c1) goto cycle_size_present;
                                         cycleN_sizes[cycleNsizes_count] = c1;
@@ -578,13 +579,55 @@ int main(int argc, char** argv) {
                                     } else
                                         std::cout << ", ";
                                     std::cout << cm << "/" << c1;
-                                    // updating cycles starts
-                                    if ((cm == 1) || ((cm % c1) == 1)) if (!cycleN_start[c]) cycleN_start[c] = p1 - c1;
-                                    if (c1 == cycle_max_size) cycle_start = cycleN_start[c] - 1;
-                                } else {
+                                    // updating cycles' starts
+                                    if ((cm == 1) || ((cm % c1) == 1)) {
+                                        int cs = cycleN_start[c];
+                                        int ns = p1 - c1;
+                                        if      (!cs)     cs = -ns; //1st time is not stable
+                                        else if (cs < 0)  cs =  ns;
+                                        else if (ns < cs) cs =  ns;
+                                        cycleN_start[c] = cs;
+                                        ns = passes + 1; // max
+                                        //cycle_start = std::abs(cycleN_start[cycleN_sizes[0] - 1]); // by this time cycleN_sizes should have at least 1 member
+                                        for (unsigned k = 0; k < cycleNsizes_count; k++) {
+                                            cs = cycleN_sizes[k];
+                                            if (cs >= int(detect_threshold)) { // don't include skipped cycles
+                                                cs = cycleN_start[cs - 1];
+                                                if (cs > 0) // skip unstable cycles
+                                                    if (cs < ns) ns = cs;
+                                            }
+                                        }
+                                        if (ns > int(passes)) { // no stable cycles, trying to set to unstable valid cycles
+                                            for (unsigned k = 0; k < cycleNsizes_count; k++) {
+                                                cs = cycleN_sizes[k];
+                                                if (cs >= int(detect_threshold)) { // don't include skipped cycles
+                                                    cs = -cycleN_start[cs - 1];
+                                                    if (cs > 0) // unstable cycle
+                                                        if (cs < ns) ns = cs;
+                                                }
+                                            }
+                                            if (ns > int(passes)) { // no valid cycles, setting to at least something
+                                                for (unsigned k = 0; k < cycleNsizes_count; k++) {
+                                                    cs = cycleN_start[cycleN_sizes[k] - 1];
+                                                    if (cs) {
+                                                        ns = std::abs(cs);
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if (ns <= int(passes)) {
+                                            cycle_start = ns - 1;
+if (debug_output) std::cout << "+" << cycle_start;
+                                        }
+                                    }
+                                    if (c1 == cycle_size) { // estimated match, direct start correction
+                                        cycle_start = p1 - c1 - cm;
+                                        cycleN_start[c] = cycle_start;
+if (debug_output) std::cout << "=" << cycle_start;
+                                    }
+                                } else
                                     cycleN_count[c] = 0;
-                                    cycleN_start[c] = 0;
-                                }
                             }
                             if (!line_start) std::cout << "." << std::endl;
 if (debug_output) {
@@ -615,15 +658,10 @@ std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_si
                             zip_indices[p] = zip_indices[add_index];
                         } else { // archive does not match any previous sample
                             // updating estimated number of passes
-                            if (cycle_size) {
-                                unsigned cs = cycleN_start[cycle_max_size - 1];
-                                if (cs) cycle_start = cs - 1;
-                            } else
-                                cycle_start = p;
+                            cycle_start++;
                             // resetting match counters
                             match_counter = 0;
                             cycleN_count.assign(passes, 0);
-                            cycleN_start.assign(passes, 0);
                             // adding archive to samples storage
                             zip_indices[p] = zip_storage.size();
                             zip_storage.emplace_back(); // empty sample
