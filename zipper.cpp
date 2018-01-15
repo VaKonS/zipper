@@ -583,9 +583,9 @@ int main(int argc, char** argv) {
                                     if ((cm == 1) || ((cm % c1) == 1)) {
                                         int cs = cycleN_start[c];
                                         int ns = p1 - c1;
-                                        if      (!cs)     cs = -ns; //1st time is not stable
+                                        if      (!cs)     cs = -ns; // 1st time is not stable
                                         else if (cs < 0)  cs =  ns;
-                                        else if (ns < cs) cs =  ns;
+                                        //else if (ns < cs) cs =  ns; // not really necessary, cycle starts always grow
                                         cycleN_start[c] = cs;
                                         ns = passes + 1; // max
                                         bool is_minimal = false;
@@ -621,6 +621,16 @@ int main(int argc, char** argv) {
                                             if (ns <= int(passes)) {
                                                 cycle_start = ns - 1;
 if (debug_output) std::cout << "+" << cycle_start;
+                                            }
+                                        }
+                                        for (unsigned k = cycle_max_size + 1; k < cycle_size; k++) {
+                                            cs = cycleN_start[k];
+                                            if (cs > 0) { // skip unstable cycles
+                                                cs--;
+                                                if (cs < int(cycle_start)) {
+                                                    cycle_start = cs;
+if (debug_output) std::cout << "-" << cycle_start;
+                                                }
                                             }
                                         }
                                     }
