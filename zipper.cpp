@@ -583,9 +583,10 @@ int main(int argc, char** argv) {
                                     if ((cm == 1) || ((cm % c1) == 1)) {
                                         int cs = cycleN_start[c];
                                         int ns = p1 - c1;
-                                        if      (!cs)     cs = -ns; // 1st time is not stable
-                                        else if (cs < 0)  cs =  ns;
-                                        //else if (ns < cs) cs =  ns; // not really necessary, cycle starts always grow
+                                        if (!cs) cs = -ns; // 1st time is not stable
+                                        else if (cs < 0) {
+                                           if (((ns + cs) % c1) == 0) cs = -cs; else cs =  ns; // if multiple cycle, keep previous start
+                                        }
                                         cycleN_start[c] = cs;
                                         ns = passes + 1; // max
                                         bool is_minimal = false;
