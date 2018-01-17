@@ -623,7 +623,7 @@ int main(int argc, char** argv) {
 if (debug_output) std::cout << "+" << cycle_start;
                                             }
                                         }
-                                        for (unsigned k = cycle_max_size + 1; k < cycle_size; k++) {
+                                        for (unsigned k = cycle_max_size; k < cycle_size; k++) {
                                             cs = cycleN_start[k];
                                             if (cs > 0) { // skip unstable cycles
                                                 cs--;
