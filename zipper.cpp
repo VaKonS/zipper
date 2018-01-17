@@ -580,65 +580,34 @@ int main(int argc, char** argv) {
                                         std::cout << ", ";
                                     std::cout << cm << "/" << c1;
                                     // updating cycles' starts
-                                    if ((cm == 1) || ((cm % c1) == 1)) {
-                                        int cs = cycleN_start[c];
-                                        int ns = p1 - c1;
-                                        if (!cs) cs = -ns; // 1st time is not stable
-                                        else if (cs < 0) {
-                                           if (((ns + cs) % c1) == 0) cs = -cs; else cs =  ns; // if multiple cycle, keep previous start
-                                        }
-                                        cycleN_start[c] = cs;
-                                        ns = passes + 1; // max
-                                        bool is_minimal = false;
-                                        for (unsigned k = 0; k < cycleNsizes_count; k++) {
-                                            cs = cycleN_sizes[k];
-                                            if (cs == int(c1)) is_minimal = true;
-                                            if (cs >= int(detect_threshold)) { // don't include skipped cycles
-                                                cs = cycleN_start[cs - 1];
-                                                if (cs > 0) // skip unstable cycles
-                                                    if (cs < ns) ns = cs;
-                                            }
-                                        }
-                                        if (is_minimal) { // multiple cycles are ignored and won't change cycle_start
-                                            if (ns > int(passes)) { // no stable cycles, trying to set to unstable valid cycles
-                                                for (unsigned k = 0; k < cycleNsizes_count; k++) {
-                                                    cs = cycleN_sizes[k];
-                                                    if (cs >= int(detect_threshold)) { // don't include skipped cycles
-                                                        cs = -cycleN_start[cs - 1];
-                                                        if (cs > 0) // unstable cycle
-                                                            if (cs < ns) ns = cs;
-                                                    }
-                                                }
-                                                if (ns > int(passes)) { // no valid cycles, setting to at least something
-                                                    for (unsigned k = 0; k < cycleNsizes_count; k++) {
-                                                        cs = cycleN_start[cycleN_sizes[k] - 1];
-                                                        if (cs) {
-                                                            ns = std::abs(cs);
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            if (ns <= int(passes)) {
-                                                cycle_start = ns - 1;
-if (debug_output) std::cout << "+" << cycle_start;
-                                            }
-                                        }
-                                        for (unsigned k = cycle_max_size; k < cycle_size; k++) {
-                                            cs = cycleN_start[k];
-                                            if (cs > 0) { // skip unstable cycles
-                                                cs--;
-                                                if (cs < int(cycle_start)) {
-                                                    cycle_start = cs;
-if (debug_output) std::cout << "-" << cycle_start;
-                                                }
-                                            }
-                                        }
-                                    }
                                     if (c1 == cycle_size) { // estimated match, direct start correction
                                         cycle_start = p1 - c1 - cm;
                                         cycleN_start[c] = cycle_start + 1;
 if (debug_output) std::cout << "=" << cycle_start;
+                                    } else if ((c1 < cycle_size) && ((cm == 1) || ((cm % c1) == 1))) { // cycle is started, correct start with minimal of stable cycles
+                                        int cs = cycleN_start[c];
+                                        int ns = p1 - c1;
+                                        if (!cs) cs = -ns; // 1st time is not stable
+                                        else if (cs < 0) {
+                                           if (((ns + cs) % c1) == 0) cs = -cs; else cs =  ns; // if cycle is multiple, keep previous start
+                                        }
+                                        cycleN_start[c] = cs;
+                                        ns = passes + 1; // max
+                                        for (unsigned k = std::min(cycle_size, passes); k >= detect_threshold; k--) {
+                                            cs = cycleN_start[k - 1];
+                                            if (cs > 0) // skip unstable cycles
+                                                if (cs < ns) ns = cs;
+                                        }
+                                        if (ns > int(passes)) // no stable cycles, trying just set ones
+                                            for (unsigned k = std::min(cycle_size, passes); k >= detect_threshold; k--) {
+                                                cs = -cycleN_start[k - 1];
+                                                if (cs > 0) // skip stable cycles
+                                                    if (cs < ns) ns = cs;
+                                            }
+                                        if ((!cycle_start && (ns <= int(passes))) || (ns <= int(cycle_start))) { // ns is set and cycle_start is greater or wasn't set
+                                            cycle_start = ns - 1;
+if (debug_output) std::cout << "-" << cycle_start;
+                                        }
                                     }
                                 } else
                                     cycleN_count[c] = 0;
