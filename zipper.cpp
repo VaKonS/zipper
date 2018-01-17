@@ -183,23 +183,63 @@ std::wstring wTrailSlash(std::wstring s) {
     return s + L"\\";
 }
 
-unsigned MinimalMultiple(std::vector<unsigned> a, unsigned k) { // array[passes], index of last used element
-    unsigned l1 = a[k];
-    unsigned multiple = l1;
-    for (unsigned l = 0; l < k; l++) {
-        for (unsigned n = 1; n <= l1; n++) {
-            unsigned long long m = a[l] * n;
-            if ((m % l1) == 0) {
-                if (m > (unsigned long long) 0x0ffffffff) {
-                    std::cerr << "\nMinimalMultiple: cycle size does not fit to long integer." << std::endl;
-                    return unsigned(-1);
-                }
-                if (m > multiple) multiple = m;
-                break;
-            }
+//* multi-pass fastest variant
+unsigned MinimalMultipleMP(std::vector<unsigned> * a, unsigned k, unsigned am, unsigned p) { // array, index of last used element, previous multiple
+    unsigned new_a = (*a)[k];
+    unsigned prev_mul = std::max(p, am); if (!prev_mul) prev_mul = 1;
+    for (unsigned n = 1; n <= prev_mul; n++) {
+        unsigned long long m = new_a * n;
+        if (m > (unsigned long long) 0x7fffffff) {
+            std::cerr << "\nMinimalMultipleMP does not fit to long integer." << std::endl;
+            return unsigned(-1);
         }
+        if (m >= prev_mul) {
+            for (unsigned l = 0; l < k; l++) if (m % (*a)[l]) goto not_multiple;
+            return m;
+        }
+        not_multiple: ;
+    }
+    // should not be here, probably an overflow
+    std::cerr << "\nMinimalMultipleMP not found." << std::endl;
+    return unsigned(-1);
+}
+//* single call fast variant
+unsigned MinimalMultipleSP(std::vector<unsigned> * a, unsigned k, unsigned am) { // array, index of last used element, largest value
+    //unsigned am = (*a)[0]; for (unsigned i = 1; i <= k; i++) am = std::max(am, (*a)[i]);
+    unsigned multiple = std::max(am, 1u);
+    for (unsigned i = 0; i <= k; i++) {
+        unsigned new_a = (*a)[i];
+        for (unsigned n = 1; n <= multiple; n++) {
+            unsigned long long m = new_a * n;
+            if (m > (unsigned long long) 0x7fffffff) {
+                std::cerr << "\nMinimalMultipleSP does not fit to long integer." << std::endl;
+                return unsigned(-1);
+            }
+            if (m >= multiple) {
+                for (unsigned l = 0; l < i; l++) if (m % (*a)[l]) goto not_multiple;
+                multiple = m;
+                goto is_multiple;
+            }
+            not_multiple: ;
+        }
+        // should not be here, probably an overflow
+        std::cerr << "\nMinimalMultipleSP not found." << std::endl;
+        return unsigned(-1);
+        is_multiple: ;
     }
     return multiple;
+}
+//* single call slowest variant
+unsigned MinimalMultiple(std::vector<unsigned> * a, unsigned k, unsigned am) { // array, index of last used element, largest value
+    unsigned long long multiple = std::max(am, 1u);
+    while (multiple <= (unsigned long long) 0x7fffffff) {
+        for (unsigned i = 0; i <= k; i++) if (multiple % (*a)[i]) goto not_multiple;
+        return unsigned(multiple);
+       not_multiple:
+        multiple++;
+    }
+    std::cerr << "\nMinimalMultiple does not fit to long integer." << std::endl;
+    return unsigned(-1);
 }
 
 std::string dhms(double s) {
@@ -237,7 +277,34 @@ std::string arpl(unsigned n) {return (n == 1) ? " archive":" archives";}
 
 
 int main(int argc, char** argv) {
-
+/* MinimalMultiple test
+    cycleN_count.clear();
+    unsigned pm = 0;
+    unsigned am = 0;
+    srand(time(NULL));
+    for (unsigned p = 0; p < 100; p++) {
+        unsigned r = std::rand() % 100 + 1;
+        am = std::max(am, r);
+        cycleN_count.push_back(r);
+        std::cout << r << " > ";
+        StartTime = time(NULL);
+        pm = MinimalMultipleMP(&cycleN_count, p, am, pm);
+        double pmt = difftime(time(NULL), StartTime);
+        StartTime = time(NULL);
+        unsigned a = MinimalMultipleSP(&cycleN_count, p, am);
+        double at = difftime(time(NULL), StartTime);
+        StartTime = time(NULL);
+        unsigned b = MinimalMultiple(&cycleN_count, p, am);
+        double bt = difftime(time(NULL), StartTime);
+        if ((b == unsigned(-1)) || (a != b) || (b != pm)) {
+            std::cout << "MinimalMultiple: " << b << ", MinimalMultipleSP: " << a << ", MinimalMultipleMP: " << pm << " (" << int(bt) << ", " << int(at) << ", " << int(pmt) << ")." << std::endl;
+            return -1;
+        }
+        std::cout << b << " (" << int(bt) << ", " << int(at) << ", " << int(pmt) << ")." << std::endl;;
+    }
+    std::cout << "Done." << std::endl;
+    return -1;
+//*/
     if (output_locale == CP_UTF8) {
         SetConsoleOutputCP(CP_UTF8);
         SetConsoleCP(CP_UTF8);
@@ -575,9 +642,10 @@ int main(int argc, char** argv) {
                                         for (unsigned k = 0; k < cycleNsizes_count; k++)
                                             if (cycleN_sizes[k] == c1) goto cycle_size_present;
                                         cycleN_sizes[cycleNsizes_count] = c1;
-                                        if ((cycle_size = MinimalMultiple(cycleN_sizes, cycleNsizes_count)) == unsigned(-1)) goto passes_checked; // error
-                                        cycleNsizes_count++;
                                         if (c1 > cycle_max_size) cycle_max_size = c1;
+                                        //if ((cycle_size = MinimalMultiple(&cycleN_sizes, cycleNsizes_count, cycle_max_size)) == unsigned(-1)) goto passes_checked; // error
+                                        if ((cycle_size = MinimalMultipleMP(&cycleN_sizes, cycleNsizes_count, cycle_max_size, cycle_size)) == unsigned(-1)) goto passes_checked; // error
+                                        cycleNsizes_count++;
                                        cycle_size_present:
                                         line_start = false;
                                         std::cout << "Possible cycle(s): ";
