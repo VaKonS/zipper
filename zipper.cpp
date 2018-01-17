@@ -622,12 +622,12 @@ std::cout << "Cycle starts:";
 for (unsigned c = 0; c < passes; c++) if (cycleN_start[c])
     std::cout << " " << (c + 1) << ":" << (cycleN_start[c] - ((cycleN_start[c] > 0)?1:-1));
 std::cout << "." << std::endl;
-std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_size << ", cycle_end: " << (cycle_start + cycle_size) << ", passes: " << (cycle_start + cycle_size * 2) << "." << std::endl;
+std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_size << ", cycle_end: " << (cycle_start + cycle_size) << ", passes: " << (cycle_start + cycle_size + detect_threshold) << "." << std::endl;
 }
                             if (!old_detection) {
                                 if (detect_threshold_current < cycle_size) detect_threshold_current = cycle_size;
-                                if ((detect_threshold_current <= passes) && (cycleN_count[detect_threshold_current - 1] >= detect_threshold_current)) {
-                                    std::cout << "Required " << detect_threshold_current << arpl(detect_threshold_current) << " matched. Search complete." << std::endl;
+                                if ((detect_threshold_current <= passes) && (cycleN_count[detect_threshold_current - 1] >= detect_threshold)) {
+                                    std::cout << "Required " << detect_threshold << arpl(detect_threshold) << " matched. Search complete." << std::endl;
                                     is_full = true;
                                     goto passes_checked;
                                 }
@@ -664,12 +664,12 @@ std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_si
                 if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold_current << "." << std::endl;
                 if (cycle_size > 0) {
                     unsigned current_size; //current_size = std::max(cycle_size, detect_threshold_current);
-                    if (!match_counter || (p1 < (cycle_start + detect_threshold_current * 2)))
+                    if (!match_counter || (p1 < (cycle_start + detect_threshold_current + detect_threshold)))
                         current_size = detect_threshold_current;
                     else
                         current_size = cycle_size;
                     current_size = int(std::floor(double(p1 - cycle_start) / current_size / 2)) * current_size + current_size;
-                    unsigned tp = cycle_start + current_size * 2;
+                    unsigned tp = cycle_start + current_size + detect_threshold;
                     // passes = n*(n+1)/2
                     // p2/p1 = n2*(n2+1)/2/n1*(n1+1)*2 = n2*(n2+1)/n1/(n1+1)
                     double k = static_cast<double>(tp) * (tp + 1) / p1 / (p1 + 1);
