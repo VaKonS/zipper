@@ -18,7 +18,7 @@
 const int output_locale = 866; //65001; //1251; // if anything but CP_UTF8, OEM codepage will be used
 const std::wstring SevenZipSubPath = L"7-Zip\\7z.exe";
 const std::wstring zipExt = L".zip";
-bool auto_passes = false;
+bool auto_passes = false, old_detection = false, full_check = false;
 HANDLE file_check = INVALID_HANDLE_VALUE;
 HANDLE outfile = INVALID_HANDLE_VALUE;
 STARTUPINFO si = {
@@ -60,7 +60,7 @@ MEMORYSTATUS mem_stat = {
 
 
 // uninitialized data (declared here to free stack)
-bool show_passes, show_full, is_full, old_detection, debug_output;
+bool show_passes, show_full, is_full, debug_output;
 unsigned passes, begin, detect_threshold, detect_threshold_current;
 unsigned minimal_zip_length, minimal_zip_passes;
 unsigned pass_counter;
@@ -303,9 +303,11 @@ int main(int argc, char** argv) {
                     "Show \"cycle size / unfinished search\" in names. [1 = yes]", false,
                     true, "boolean", cmd);
 
-    TCLAP::ValueArg<bool> cmdOld("a", "alternative-detection",
-                    "Use old cycling detection algorithm. [0 = no]", false,
-                    false, "boolean", cmd);
+    TCLAP::ValueArg<int> cmdOld("a", "alternative-detection",
+                    "0 - use normal cycling detection (1st cycle + matches); [0 = normal]\n"
+                    "1 - use old cycling detection (any matches);\n"
+                    "2 - force full 2nd cycle comparison.", false,
+                    0, "integer", cmd);
 
     TCLAP::ValueArg<std::string> cmdMMT("m", "multithreading",
                     "7-Zip multithreading = off/on/N threads. [on]", false,
@@ -340,7 +342,10 @@ int main(int argc, char** argv) {
     zipSingle          = oemstring2wstring(cmdSingle.getValue());
     show_passes        = cmdShowPasses.getValue();
     show_full          = cmdShowFull.getValue();
-    old_detection      = cmdOld.getValue();
+    if (int a = cmdOld.getValue()) {
+        old_detection = (a == 1);
+        full_check    = (a == 2);
+    }
     debug_output       = cmdDebug.getValue();
     mem_limit          = std::max(0, cmdMemLimit.getValue()) << 20;
     passes             = std::max(0, cmdPasses.getValue());
@@ -622,12 +627,13 @@ std::cout << "Cycle starts:";
 for (unsigned c = 0; c < passes; c++) if (cycleN_start[c])
     std::cout << " " << (c + 1) << ":" << (cycleN_start[c] - ((cycleN_start[c] > 0)?1:-1));
 std::cout << "." << std::endl;
-std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_size << ", cycle_end: " << (cycle_start + cycle_size) << ", passes: " << (cycle_start + cycle_size + detect_threshold) << "." << std::endl;
+std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_size << ", cycle_end: " << (cycle_start + cycle_size) << ", detect_threshold: " << detect_threshold << ", max passes: " << (cycle_start + cycle_size * 2) << "." << std::endl;
 }
                             if (!old_detection) {
                                 if (detect_threshold_current < cycle_size) detect_threshold_current = cycle_size;
-                                if ((detect_threshold_current <= passes) && (cycleN_count[detect_threshold_current - 1] >= detect_threshold)) {
-                                    std::cout << "Required " << detect_threshold << arpl(detect_threshold) << " matched. Search complete." << std::endl;
+                                unsigned m = (full_check)?detect_threshold_current:detect_threshold;
+                                if ((detect_threshold_current <= passes) && (cycleN_count[detect_threshold_current - 1] >= m)) {
+                                    std::cout << "Required " << m << arpl(m) << " matched. Search complete." << std::endl;
                                     is_full = true;
                                     goto passes_checked;
                                 }
@@ -664,12 +670,12 @@ std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_si
                 if (matched_once) std::cout << "Matched archives: " << ((match_counter == 0) ? "-" : std::to_string(match_counter)) << "/" << detect_threshold_current << "." << std::endl;
                 if (cycle_size > 0) {
                     unsigned current_size; //current_size = std::max(cycle_size, detect_threshold_current);
-                    if (!match_counter || (p1 < (cycle_start + detect_threshold_current + detect_threshold)))
+                    if (!match_counter || (p1 < (cycle_start + detect_threshold_current + ((full_check)?detect_threshold_current:detect_threshold))))
                         current_size = detect_threshold_current;
                     else
                         current_size = cycle_size;
                     current_size = int(std::floor(double(p1 - cycle_start) / current_size / 2)) * current_size + current_size;
-                    unsigned tp = cycle_start + current_size + detect_threshold;
+                    unsigned tp = cycle_start + current_size + ((full_check)?current_size:detect_threshold);
                     // passes = n*(n+1)/2
                     // p2/p1 = n2*(n2+1)/2/n1*(n1+1)*2 = n2*(n2+1)/n1/(n1+1)
                     double k = static_cast<double>(tp) * (tp + 1) / p1 / (p1 + 1);
