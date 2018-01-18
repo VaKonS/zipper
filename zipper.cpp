@@ -64,7 +64,7 @@ bool show_passes, show_full, is_full, debug_output;
 unsigned passes, begin, detect_threshold, detect_threshold_current;
 unsigned minimal_zip_length, minimal_zip_passes;
 unsigned pass_counter;
-bool matched_once, matched_pass, prematch;
+bool matched_once, matched_pass;
 unsigned match_counter;
 unsigned cycle_start, cycle_size, cycle_max_size, cycleNsizes_count;
 size_t mem_limit, mem_use;
@@ -183,16 +183,8 @@ std::wstring wTrailSlash(std::wstring s) {
     return s + L"\\";
 }
 
-// multi-pass, fastest variant
-unsigned MinimalMultipleMP(std::vector<unsigned> &a, unsigned k, unsigned am, unsigned p) { // array, index of last used element, previous multiple
+unsigned MinimalMultiple(std::vector<unsigned> &a, unsigned k, unsigned am, unsigned p) { // array, index of last used element, previous multiple
     unsigned new_a = a[k];
-    if (k) {
-        if (new_a < a[k - 1]) {
-            unsigned b = a[k - 1];
-            a[k - 1] = new_a;
-            a[k] = b;
-        }
-    }
     unsigned prev_mul = std::max(p, am); if (!prev_mul) prev_mul = 1;
     for (unsigned n = 1; n <= prev_mul; n++) {
         unsigned long long m = new_a * n;
@@ -210,46 +202,6 @@ unsigned MinimalMultipleMP(std::vector<unsigned> &a, unsigned k, unsigned am, un
     std::cerr << "\nMinimalMultipleMP not found." << std::endl;
     return unsigned(-1);
 }
-/*
-// single call fast variant
-unsigned MinimalMultipleSP(std::vector<unsigned> * a, unsigned k, unsigned am) { // array, index of last used element, largest value
-    //unsigned am = (*a)[0]; for (unsigned i = 1; i <= k; i++) am = std::max(am, (*a)[i]);
-    unsigned multiple = std::max(am, 1u);
-    for (unsigned i = 0; i <= k; i++) {
-        unsigned new_a = (*a)[i];
-        for (unsigned n = 1; n <= multiple; n++) {
-            unsigned long long m = new_a * n;
-            if (m > (unsigned long long) 0x7fffffff) {
-                std::cerr << "\nMinimalMultipleSP does not fit to long integer." << std::endl;
-                return unsigned(-1);
-            }
-            if (m >= multiple) {
-                for (unsigned l = 0; l < i; l++) if (m % (*a)[l]) goto not_multiple;
-                multiple = m;
-                goto is_multiple;
-            }
-            not_multiple: ;
-        }
-        // should not be here, probably an overflow
-        std::cerr << "\nMinimalMultipleSP not found." << std::endl;
-        return unsigned(-1);
-        is_multiple: ;
-    }
-    return multiple;
-}
-// single call slowest variant
-unsigned MinimalMultiple(std::vector<unsigned> * a, unsigned k, unsigned am) { // array, index of last used element, largest value
-    unsigned long long multiple = std::max(am, 1u);
-    while (multiple <= (unsigned long long) 0x7fffffff) {
-        for (unsigned i = 0; i <= k; i++) if (multiple % (*a)[i]) goto not_multiple;
-        return unsigned(multiple);
-       not_multiple:
-        multiple++;
-    }
-    std::cerr << "\nMinimalMultiple does not fit to long integer." << std::endl;
-    return unsigned(-1);
-}
-//*/
 
 std::string dhms(double s) {
     std::string r;
@@ -286,34 +238,7 @@ std::string arpl(unsigned n) {return (n == 1) ? " archive":" archives";}
 
 
 int main(int argc, char** argv) {
-/* MinimalMultiple test
-    cycleN_count.clear();
-    unsigned pm = 0;
-    unsigned am = 0;
-    srand(time(NULL));
-    for (unsigned p = 0; p < 100; p++) {
-        unsigned r = std::rand() % 100 + 1;
-        am = std::max(am, r);
-        cycleN_count.push_back(r);
-        std::cout << r << " > ";
-        StartTime = time(NULL);
-        pm = MinimalMultipleMP(&cycleN_count, p, am, pm);
-        double pmt = difftime(time(NULL), StartTime);
-        StartTime = time(NULL);
-        unsigned a = MinimalMultipleSP(&cycleN_count, p, am);
-        double at = difftime(time(NULL), StartTime);
-        StartTime = time(NULL);
-        unsigned b = MinimalMultiple(&cycleN_count, p, am);
-        double bt = difftime(time(NULL), StartTime);
-        if ((b == unsigned(-1)) || (a != b) || (b != pm)) {
-            std::cout << "MinimalMultiple: " << b << ", MinimalMultipleSP: " << a << ", MinimalMultipleMP: " << pm << " (" << int(bt) << ", " << int(at) << ", " << int(pmt) << ")." << std::endl;
-            return -1;
-        }
-        std::cout << b << " (" << int(bt) << ", " << int(at) << ", " << int(pmt) << ")." << std::endl;;
-    }
-    std::cout << "Done." << std::endl;
-    return -1;
-//*/
+
     if (output_locale == CP_UTF8) {
         SetConsoleOutputCP(CP_UTF8);
         SetConsoleCP(CP_UTF8);
@@ -428,14 +353,6 @@ int main(int argc, char** argv) {
     passes             = std::max(0, cmdPasses.getValue());
     detect_threshold   = std::max(unsigned(1), std::min(unsigned(cmdDetect.getValue()), (passes > 0)?passes:unsigned(-1))); // limit to 1...passes
     begin              = std::max(1, cmdStart.getValue());
-
-if (debug_output) {
-std::cout << "old_detection: " << old_detection << ", full_check: " << full_check << ", no_precycles: " << no_precycles
-          << "\nauto_passes: " << auto_passes << ", detect_threshold: " << detect_threshold << std::endl;
-std::cout << "Locale: " << ((locale_name == NULL)?"error getting locale name.":std::string(locale_name)) << std::endl;
-//system("graftabl");
-}
-
     if (passes < 1) {
         auto_passes = true;
         passes = std::max(576, (int) detect_threshold) * 3 + begin - 1; // 24*24*3
@@ -444,7 +361,15 @@ std::cout << "Locale: " << ((locale_name == NULL)?"error getting locale name.":s
         std::cerr << "\nStarting number of passes is greater than total number (" << begin << " > " << passes << "). Stop." << std::endl;
         return Close_All_Return(EXIT_FAILURE);
     }
-    std::cout << "Archiver: \"" << wstring2oemstring(arg_string[0]) << "\"." << std::endl;
+
+if (debug_output) {
+std::cout << "old_detection: " << old_detection << ", full_check: " << full_check << ", no_precycles: " << no_precycles
+          << "\nauto_passes: " << auto_passes << ", detect_threshold: " << detect_threshold << std::endl;
+std::cout << "Locale: " << ((locale_name == NULL)?"error getting locale name.":std::string(locale_name)) << std::endl;
+//system("graftabl");
+std::cout << "Archiver: \"" << wstring2oemstring(arg_string[0]) << "\"." << std::endl;
+}
+
     arg_string[3] = L"%"; // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
 
     // parsing command template
@@ -611,7 +536,6 @@ std::cout << "Locale: " << ((locale_name == NULL)?"error getting locale name.":s
                         cycleN_match.assign(passes, false);
                         matched_pass = false;
                         unsigned full_counter = 0;
-                        prematch = false;
                         for (int c = p - 1; c >= 0; c--) {
                             if (zip_indices[c] != -1) { // for skipped passes
                                 if (zip_storage[zip_indices[c]].size() == static_cast<size_t>(zip_length)) {
@@ -636,7 +560,6 @@ std::cout << "Locale: " << ((locale_name == NULL)?"error getting locale name.":s
                                             }
                                             if (!full_counter) {
                                                 std::cout << "Full cycle(s): ";
-                                                if (dc >= detect_threshold) prematch = true;
                                             } else
                                                 std::cout << ", ";
                                             full_counter = dc;
@@ -663,8 +586,7 @@ std::cout << "Locale: " << ((locale_name == NULL)?"error getting locale name.":s
                                             if (cycleN_sizes[k] == c1) goto cycle_size_present;
                                         cycleN_sizes[cycleNsizes_count] = c1;
                                         if (c1 > cycle_max_size) cycle_max_size = c1;
-                                        //if ((cycle_size = MinimalMultiple(&cycleN_sizes, cycleNsizes_count, cycle_max_size)) == unsigned(-1)) goto passes_checked; // error
-                                        if ((cycle_size = MinimalMultipleMP(std::ref(cycleN_sizes), cycleNsizes_count, cycle_max_size, cycle_size)) == unsigned(-1)) goto passes_checked; // error
+                                        if ((cycle_size = MinimalMultiple(std::ref(cycleN_sizes), cycleNsizes_count, cycle_max_size, cycle_size)) == unsigned(-1)) goto passes_checked; // error
                                         cycleNsizes_count++;
                                        cycle_size_present:
                                         line_start = false;
@@ -726,7 +648,7 @@ std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_si
                                     is_full = true;
                                     goto passes_checked;
                                 }
-                                if (!no_precycles && prematch) {
+                                if (!no_precycles) {
                                     unsigned l = std::min(cycle_size - 1, passes); // search within passes and before cycle_size
                                     for (unsigned c = detect_threshold - 1; c < l; c++) {
                                         unsigned c1 = c + 1;
@@ -784,7 +706,7 @@ std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_si
                     double k = static_cast<double>(tp) * (tp + 1) / p1 / (p1 + 1);
                     //std::cout << "Time: " << dhms(difftime(time(NULL), StartTime)) << "." << std::endl;
                     std::cout << "Estimated cycle: " << cycle_size << ", total passes: " << tp
-                              << ".\nTime left: " << dhms((k - 1) * difftime(time(NULL), StartTime)) << "." << std::endl; //k*CurrentSeconds-CurrentSeconds
+                              << ".\nTime left: at least " << dhms((k - 1) * difftime(time(NULL), StartTime)) << "." << std::endl; //k*CurrentSeconds-CurrentSeconds
                 }
                 p = p1; //p++;
                 if (auto_passes and (p >= passes)) {
