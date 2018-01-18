@@ -183,9 +183,16 @@ std::wstring wTrailSlash(std::wstring s) {
     return s + L"\\";
 }
 
-//* multi-pass fastest variant
-unsigned MinimalMultipleMP(std::vector<unsigned> * a, unsigned k, unsigned am, unsigned p) { // array, index of last used element, previous multiple
-    unsigned new_a = (*a)[k];
+// multi-pass, fastest variant
+unsigned MinimalMultipleMP(std::vector<unsigned> &a, unsigned k, unsigned am, unsigned p) { // array, index of last used element, previous multiple
+    unsigned new_a = a[k];
+    if (k) {
+        if (new_a < a[k - 1]) {
+            unsigned b = a[k - 1];
+            a[k - 1] = new_a;
+            a[k] = b;
+        }
+    }
     unsigned prev_mul = std::max(p, am); if (!prev_mul) prev_mul = 1;
     for (unsigned n = 1; n <= prev_mul; n++) {
         unsigned long long m = new_a * n;
@@ -194,7 +201,7 @@ unsigned MinimalMultipleMP(std::vector<unsigned> * a, unsigned k, unsigned am, u
             return unsigned(-1);
         }
         if (m >= prev_mul) {
-            for (unsigned l = 0; l < k; l++) if (m % (*a)[l]) goto not_multiple;
+            for (unsigned l = 0; l < k; l++) if (m % a[l]) goto not_multiple;
             return m;
         }
         not_multiple: ;
@@ -203,7 +210,8 @@ unsigned MinimalMultipleMP(std::vector<unsigned> * a, unsigned k, unsigned am, u
     std::cerr << "\nMinimalMultipleMP not found." << std::endl;
     return unsigned(-1);
 }
-//* single call fast variant
+/*
+// single call fast variant
 unsigned MinimalMultipleSP(std::vector<unsigned> * a, unsigned k, unsigned am) { // array, index of last used element, largest value
     //unsigned am = (*a)[0]; for (unsigned i = 1; i <= k; i++) am = std::max(am, (*a)[i]);
     unsigned multiple = std::max(am, 1u);
@@ -229,7 +237,7 @@ unsigned MinimalMultipleSP(std::vector<unsigned> * a, unsigned k, unsigned am) {
     }
     return multiple;
 }
-//* single call slowest variant
+// single call slowest variant
 unsigned MinimalMultiple(std::vector<unsigned> * a, unsigned k, unsigned am) { // array, index of last used element, largest value
     unsigned long long multiple = std::max(am, 1u);
     while (multiple <= (unsigned long long) 0x7fffffff) {
@@ -241,6 +249,7 @@ unsigned MinimalMultiple(std::vector<unsigned> * a, unsigned k, unsigned am) { /
     std::cerr << "\nMinimalMultiple does not fit to long integer." << std::endl;
     return unsigned(-1);
 }
+//*/
 
 std::string dhms(double s) {
     std::string r;
@@ -324,7 +333,7 @@ int main(int argc, char** argv) {
 
     // definition of command line arguments   abcdefghijklmnopqrstuvwxyz
     //                                        abcdef.hi..lmnop.rst......
-    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.6");
+    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.61");
 
     TCLAP::ValueArg<std::string> cmdInputDir("i", "input-mask",
                     "Directory with files to compress.\nRun Zipper from this directory to avoid paths inside archives. [.]", false,
@@ -398,8 +407,6 @@ int main(int argc, char** argv) {
     }
 
     // command line accepted, begin console processing
-    std::cout << "Locale: " << ((locale_name == NULL)?"error getting locale name.":std::string(locale_name)) << std::endl;
-    //system("graftabl");
     arg_string[0]      = oemstring2wstring(cmd7Zip.getValue()); // 0 - 7z.exe, 1 - input file, 2 - temp name, 3 - %
     zipTempDir         = oemstring2wstring(cmdTempDir.getValue());
     zipInputDir        = oemstring2wstring(cmdInputDir.getValue());
@@ -418,6 +425,14 @@ int main(int argc, char** argv) {
     passes             = std::max(0, cmdPasses.getValue());
     detect_threshold   = std::max(unsigned(1), std::min(unsigned(cmdDetect.getValue()), (passes > 0)?passes:unsigned(-1))); // limit to 1...passes
     begin              = std::max(1, cmdStart.getValue());
+
+if (debug_output) {
+std::cout << "old_detection: " << old_detection << ", full_check: " << full_check
+          << ", auto_passes: " << auto_passes << ", detect_threshold: " << detect_threshold << std::endl;
+std::cout << "Locale: " << ((locale_name == NULL)?"error getting locale name.":std::string(locale_name)) << std::endl;
+//system("graftabl");
+}
+
     if (passes < 1) {
         auto_passes = true;
         passes = std::max(576, (int) detect_threshold) * 3 + begin - 1; // 24*24*3
@@ -644,7 +659,7 @@ int main(int argc, char** argv) {
                                         cycleN_sizes[cycleNsizes_count] = c1;
                                         if (c1 > cycle_max_size) cycle_max_size = c1;
                                         //if ((cycle_size = MinimalMultiple(&cycleN_sizes, cycleNsizes_count, cycle_max_size)) == unsigned(-1)) goto passes_checked; // error
-                                        if ((cycle_size = MinimalMultipleMP(&cycleN_sizes, cycleNsizes_count, cycle_max_size, cycle_size)) == unsigned(-1)) goto passes_checked; // error
+                                        if ((cycle_size = MinimalMultipleMP(std::ref(cycleN_sizes), cycleNsizes_count, cycle_max_size, cycle_size)) == unsigned(-1)) goto passes_checked; // error
                                         cycleNsizes_count++;
                                        cycle_size_present:
                                         line_start = false;
@@ -665,6 +680,7 @@ if (debug_output) std::cout << "=" << cycle_start;
                                            if (((ns + cs) % c1) == 0) cs = -cs; else cs =  ns; // if cycle is multiple, keep previous start
                                         }
                                         cycleN_start[c] = cs;
+                                        // finding minimal start
                                         ns = passes + 1; // max
                                         for (unsigned k = std::min(cycle_size, passes); k >= detect_threshold; k--) {
                                             cs = cycleN_start[k - 1];
