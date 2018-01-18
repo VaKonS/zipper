@@ -18,7 +18,7 @@
 const int output_locale = 866; //65001; //1251; // if anything but CP_UTF8, OEM codepage will be used
 const std::wstring SevenZipSubPath = L"7-Zip\\7z.exe";
 const std::wstring zipExt = L".zip";
-bool auto_passes = false, old_detection = false, full_check = false;
+bool auto_passes = false, old_detection = false, full_check = false, no_precycles = false;
 HANDLE file_check = INVALID_HANDLE_VALUE;
 HANDLE outfile = INVALID_HANDLE_VALUE;
 STARTUPINFO si = {
@@ -64,7 +64,7 @@ bool show_passes, show_full, is_full, debug_output;
 unsigned passes, begin, detect_threshold, detect_threshold_current;
 unsigned minimal_zip_length, minimal_zip_passes;
 unsigned pass_counter;
-bool matched_once, matched_pass;
+bool matched_once, matched_pass, prematch;
 unsigned match_counter;
 unsigned cycle_start, cycle_size, cycle_max_size, cycleNsizes_count;
 size_t mem_limit, mem_use;
@@ -380,9 +380,11 @@ int main(int argc, char** argv) {
                     true, "boolean", cmd);
 
     TCLAP::ValueArg<int> cmdOld("a", "alternative-detection",
-                    "0 - use normal cycling detection (1st cycle + matches); [0 = normal]\n"
-                    "1 - use old cycling detection (any matches);\n"
-                    "2 - force full 2nd cycle comparison.", false,
+                    "0 - normal cycling detection (1 cycle + matches, small cycles); [0 = normal]\n"
+                    "1 - old detection (any matches);\n"
+                    "2 - 1 cycle + matches, don't stop on small cycles;\n"
+                    "3 - 2 cycles, stop on small cycles;\n"
+                    "4 - 2 cycles, no small cycles.", false,
                     0, "integer", cmd);
 
     TCLAP::ValueArg<std::string> cmdMMT("m", "multithreading",
@@ -418,7 +420,8 @@ int main(int argc, char** argv) {
     show_full          = cmdShowFull.getValue();
     if (int a = cmdOld.getValue()) {
         old_detection = (a == 1);
-        full_check    = (a == 2);
+        full_check    = (a == 3) || (a == 4); // full 2 cycles match
+        no_precycles  = (a == 2) || (a == 4); // don't stop on small cycles
     }
     debug_output       = cmdDebug.getValue();
     mem_limit          = std::max(0, cmdMemLimit.getValue()) << 20;
@@ -427,8 +430,8 @@ int main(int argc, char** argv) {
     begin              = std::max(1, cmdStart.getValue());
 
 if (debug_output) {
-std::cout << "old_detection: " << old_detection << ", full_check: " << full_check
-          << ", auto_passes: " << auto_passes << ", detect_threshold: " << detect_threshold << std::endl;
+std::cout << "old_detection: " << old_detection << ", full_check: " << full_check << ", no_precycles: " << no_precycles
+          << "\nauto_passes: " << auto_passes << ", detect_threshold: " << detect_threshold << std::endl;
 std::cout << "Locale: " << ((locale_name == NULL)?"error getting locale name.":std::string(locale_name)) << std::endl;
 //system("graftabl");
 }
@@ -608,12 +611,13 @@ std::cout << "Locale: " << ((locale_name == NULL)?"error getting locale name.":s
                         cycleN_match.assign(passes, false);
                         matched_pass = false;
                         unsigned full_counter = 0;
+                        prematch = false;
                         for (int c = p - 1; c >= 0; c--) {
                             if (zip_indices[c] != -1) { // for skipped passes
                                 if (zip_storage[zip_indices[c]].size() == static_cast<size_t>(zip_length)) {
                                     if (memcmp(zip_storage[zip_indices[c]].data(), zip_pass1.data(), zip_length) == 0) {
                                         add_index = c;
-                                        if (!matched_pass) {
+                                        if (!matched_pass) { // increment match_counter once per pass
                                             match_counter++;
                                             matched_pass = true;
                                             matched_once = true;
@@ -632,6 +636,7 @@ std::cout << "Locale: " << ((locale_name == NULL)?"error getting locale name.":s
                                             }
                                             if (!full_counter) {
                                                 std::cout << "Full cycle(s): ";
+                                                if (dc >= detect_threshold) prematch = true;
                                             } else
                                                 std::cout << ", ";
                                             full_counter = dc;
@@ -720,6 +725,20 @@ std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_si
                                     std::cout << "Required " << m << arpl(m) << " matched. Search complete." << std::endl;
                                     is_full = true;
                                     goto passes_checked;
+                                }
+                                if (!no_precycles && prematch) {
+                                    unsigned l = std::min(cycle_size - 1, passes); // search within passes and before cycle_size
+                                    for (unsigned c = detect_threshold - 1; c < l; c++) {
+                                        unsigned c1 = c + 1;
+                                        unsigned pre_threshold = (full_check)?c1:detect_threshold;
+                                        if (cycleN_count[c] >= pre_threshold) {
+                                            std::cout << "Found full cycle: " << c1 << arpl(c1) << ". "
+                                                         "Required " << pre_threshold << arpl(pre_threshold) << " matched. Search complete." << std::endl;
+                                            cycle_size = c1;
+                                            is_full = true;
+                                            goto passes_checked;
+                                        }
+                                    }
                                 }
                             } else if (match_counter >= detect_threshold) {
                                 std::cout << "Matched" << arpl(match_counter) << ": " << match_counter << "/" << detect_threshold << ". Search complete." << std::endl;
