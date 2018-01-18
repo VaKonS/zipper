@@ -54,13 +54,12 @@ Begin from # passes. For example, when you need to continue a search.<br>
 Stop after # identical archives. Values higher than 12 are probably useless.<br>
 <br>
 **\-a** #<br>
-Detect end of search by alternative methods.<br>
-- *0* (default) - N identical archives in minimal found cycle. Seems to be most adequate;<br>
-- *1* - *any* N identical archives. Fastest method, but *maybe* skips results. So far found results were same, but it needs more testing;<br>
-- *2* - N identical archives in maximal detected cycle. I'm not sure whether minimal cycle is sufficient or not, so this option is for testing;<br>
-- *3* - full minimal found cycle. Should not be needed, for testing;<br>
-- *4* - full maximal detected cycle. For testing.
-
+Detect end of search by alternative methods:<br>
+&nbsp;•&nbsp;*0* (default) - N identical archives in minimal found cycle. Seems to be most adequate;<br>
+&nbsp;•&nbsp;*1* - *any* N identical archives. Fastest method, but *maybe* skips results. So far found results were same, but it needs more testing;<br>
+&nbsp;•&nbsp;*2* - N identical archives in maximal detected cycle. I'm not sure whether minimal cycle is sufficient or not, so this option is for testing;<br>
+&nbsp;•&nbsp;*3* - full minimal found cycle. Should not be needed, for testing;<br>
+&nbsp;•&nbsp;*4* - full maximal detected cycle. For testing, longest search.<br>
 <br>
 **\-m** off/#<br>
 Turn 7-Zip multithreading option off or limit number of threads.<br>
@@ -122,12 +121,11 @@ Redefine the archiving command. Template sequence `%c` is substituted with archi
 <br>
 **\-a** #<br>
 Условие для окончания поиска:<br>
-- *0* (исходное) - N совпавших архивов в минимальном найденном цикле. Вероятно, оптимальный вариант;<br>
-- *1* - N *любых* совпавших архивов. Не проверяет циклы, быстрее всего, но *не исключено*, что пропускает результаты из-за меньшего числа попыток. Пока что результаты совпадают, но нужно тестирование;<br>
-- *2* - N совпавших архивов в максимальном вычисленном цикле. Возможно, что минимальный цикл недостаточен и пропускает результаты, для тестового поиска до максимального цикла;<br>
-- *3* - минимальный цикл с полным совпадением. Для тестирования, при значениях `-d` 12 и выше разницы с вариантом по умолчанию быть не должно;<br>
-- *4* - полное совпадение в максимальном вычисленном цикле. Для тестирования.
-
+&nbsp;•&nbsp;*0* (исходное) - N совпавших архивов в минимальном найденном цикле. Вероятно, оптимальный вариант;<br>
+&nbsp;•&nbsp;*1* - N *любых* совпавших архивов. Не проверяет циклы, быстрее всего, но *не исключено*, что пропускает результаты из-за меньшего числа попыток. Пока что результаты совпадают, но нужно тестирование;<br>
+&nbsp;•&nbsp;*2* - N совпавших архивов в максимальном вычисленном цикле. Возможно, что минимальный цикл недостаточен и пропускает результаты, для тестового поиска до максимального цикла;<br>
+&nbsp;•&nbsp;*3* - минимальный цикл с полным совпадением. Для тестирования, при значениях `-d` 12 и выше разницы с вариантом по умолчанию быть не должно;<br>
+&nbsp;•&nbsp;*4* - полное совпадение в максимальном вычисленном цикле. Для тестирования, наиболее длительный поиск.<br>
 <br>
 **\-m** off/#<br>
 Задать количество потоков для архиватора 7-Zip.<br>
