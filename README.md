@@ -24,6 +24,7 @@ Will compress all files from current directory to "output_directory\file.extensi
 ### Current limitations:
 - When compressing to single archive, all files from subfolders will be in root folder of archive.
 - Parameters (i. e. directories/archive name) can be only in local codepage. But found filenames can have any codepage. They will not be shown correctly in console, but should be processed fine.
+- Search time is evaluated only for maximal precalculated cycle. I did not find a formula for smaller cycles (attempt was in commit [9afc972](https://github.com/VaKonS/zipper/commit/9afc972fc2c1e054012ddc0934c90ca464bf7603)), therefore only maximal possible cycle will be found.<br>It only affects time estimation, with default settings cycles smaller than maximal will end the search as intended.
 
 ---
 ## Tuning:
@@ -52,8 +53,14 @@ Begin from # passes. For example, when you need to continue a search.<br>
 **\-d** #<br>
 Stop after # identical archives. Values higher than 12 are probably useless.<br>
 <br>
-**\-a** 1<br>
-Detect end of search by old method. It's faster, but *maybe* skips results. So far both methods were finding same values, but it needs more testing.<br>
+**\-a** #<br>
+Detect end of search by alternative methods.<br>
+- *0* (default) - N identical archives in minimal found cycle. Seems to be most adequate;<br>
+- *1* - *any* N identical archives. Fastest method, but *maybe* skips results. So far found results were same, but it needs more testing;<br>
+- *2* - N identical archives in maximal detected cycle. I'm not sure whether minimal cycle is sufficient or not, so this option is for testing;<br>
+- *3* - full minimal found cycle. Should not be needed, for testing;<br>
+- *4* - full maximal detected cycle. For testing.
+
 <br>
 **\-m** off/#<br>
 Turn 7-Zip multithreading option off or limit number of threads.<br>
@@ -84,6 +91,7 @@ Redefine the archiving command. Template sequence `%c` is substituted with archi
 ### Ограничения на данный момент:
 - При сжатии в один архив, все файлы из подкаталогов будут в корне архива.
 - Параметры (имена каталогов/архива) могут задаваться только в текущей кодовой странице. Файлы, которые программа найдёт сама, могут быть с именами в любой кодовой странице. Они не будут верно отображаться, но обрабатываться должны правильно.
+- Время до окончания поиска оценивается для максимального вычисленного цикла. Я не нашёл точной формулы размера меньших циклов (попытка была в коммите [9afc972](https://github.com/VaKonS/zipper/commit/9afc972fc2c1e054012ddc0934c90ca464bf7603)), поэтому вычисляется только максимальный цикл.<br>Это влияет исключительно на оценку времени, поиск при стандартных настройках будет остановлен и при нахождении меньшего цикла.
 
 ---
 Дополнительные параметры:<br>
@@ -112,8 +120,14 @@ Redefine the archiving command. Template sequence `%c` is substituted with archi
 **\-d** #<br>
 Останавливаться при # повторах сжатия. После тестов похоже, что значения выше 12 уже ничего не меняют.<br>
 <br>
-**\-a** 1<br>
-Определять окончание поиска старым способом. Он быстрее, но не исключено, что пропускает результаты из-за меньшего числа попыток. Пока что у меня оба алгоритма дают одинаковые значения, но надо проверять.<br>
+**\-a** #<br>
+Условие для окончания поиска:<br>
+- *0* (исходное) - N совпавших архивов в минимальном найденном цикле. Вероятно, оптимальный вариант;<br>
+- *1* - N *любых* совпавших архивов. Не проверяет циклы, быстрее всего, но *не исключено*, что пропускает результаты из-за меньшего числа попыток. Пока что результаты совпадают, но нужно тестирование;<br>
+- *2* - N совпавших архивов в максимальном вычисленном цикле. Возможно, что минимальный цикл недостаточен и пропускает результаты, для тестового поиска до максимального цикла;<br>
+- *3* - минимальный цикл с полным совпадением. Для тестирования, при значениях `-d` 12 и выше разницы с вариантом по умолчанию быть не должно;<br>
+- *4* - полное совпадение в максимальном вычисленном цикле. Для тестирования.
+
 <br>
 **\-m** off/#<br>
 Задать количество потоков для архиватора 7-Zip.<br>
