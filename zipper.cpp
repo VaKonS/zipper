@@ -258,7 +258,7 @@ int main(int argc, char** argv) {
 
     // definition of command line arguments   abcdefghijklmnopqrstuvwxyz
     //                                        abcdef.hi..lmnop.rst......
-    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.61");
+    TCLAP::CmdLine cmd("Zipper: checks different number of compression passes for 7-Zip ZIP archives.", ' ', "Zipper v1.7");
 
     TCLAP::ValueArg<std::string> cmdInputDir("i", "input-mask",
                     "Directory with files to compress.\nRun Zipper from this directory to avoid paths inside archives. [.]", false,
@@ -305,11 +305,11 @@ int main(int argc, char** argv) {
                     true, "boolean", cmd);
 
     TCLAP::ValueArg<int> cmdOld("a", "alternative-detection",
-                    "0 - normal cycling detection (1 cycle + matches, small cycles); [0 = normal]\n"
+                    "0 - normal cycling detection (matches in minimal cycle); [0 = normal]\n"
                     "1 - old detection (any matches);\n"
-                    "2 - 1 cycle + matches, don't stop on small cycles;\n"
-                    "3 - 2 cycles, stop on small cycles;\n"
-                    "4 - 2 cycles, no small cycles.", false,
+                    "2 - matches in maximal cycle;\n"
+                    "3 - full minimal cycle;\n"
+                    "4 - full maximal cycle.", false,
                     0, "integer", cmd);
 
     TCLAP::ValueArg<std::string> cmdMMT("m", "multithreading",
@@ -345,7 +345,7 @@ int main(int argc, char** argv) {
     show_full          = cmdShowFull.getValue();
     if (int a = cmdOld.getValue()) {
         old_detection = (a == 1);
-        full_check    = (a == 3) || (a == 4); // full 2 cycles match
+        full_check    = (a == 3) || (a == 4); // full cycle match
         no_precycles  = (a == 2) || (a == 4); // don't stop on small cycles
     }
     debug_output       = cmdDebug.getValue();
@@ -654,8 +654,7 @@ std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_si
                                         unsigned c1 = c + 1;
                                         unsigned pre_threshold = (full_check)?c1:detect_threshold;
                                         if (cycleN_count[c] >= pre_threshold) {
-                                            std::cout << "Found full cycle: " << c1 << arpl(c1) << ". "
-                                                         "Required " << pre_threshold << arpl(pre_threshold) << " matched. Search complete." << std::endl;
+                                            std::cout << "Found cycle with " << pre_threshold << "/" << c1 << arpl(c1) << " matched. Search complete." << std::endl;
                                             cycle_size = c1;
                                             is_full = true;
                                             goto passes_checked;
@@ -706,7 +705,7 @@ std::cout << "cycle_start: " << int(cycle_start) << ", cycle_size: " << cycle_si
                     double k = static_cast<double>(tp) * (tp + 1) / p1 / (p1 + 1);
                     //std::cout << "Time: " << dhms(difftime(time(NULL), StartTime)) << "." << std::endl;
                     std::cout << "Estimated cycle: " << cycle_size << ", total passes: " << tp
-                              << ".\nTime left: at least " << dhms((k - 1) * difftime(time(NULL), StartTime)) << "." << std::endl; //k*CurrentSeconds-CurrentSeconds
+                              << ".\nTime left, at least: " << dhms((k - 1) * difftime(time(NULL), StartTime)) << "." << std::endl; //k*CurrentSeconds-CurrentSeconds
                 }
                 p = p1; //p++;
                 if (auto_passes and (p >= passes)) {
